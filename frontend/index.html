@@ -1,0 +1,115 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <title>Vasavi Trading Company — Coffee CRM Workspace</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;500;600;700&family=Fira+Sans:wght@300;400;500;600;700;800&display=swap"
+      rel="stylesheet"
+    />
+    <style>
+      html, body {
+        margin: 0;
+        padding: 0;
+        background-color: #0c0a09;
+        color: #ffffff;
+        font-family: 'Fira Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+        overflow-x: hidden;
+      }
+      #root {
+        min-height: 100vh;
+      }
+      .boot {
+        height: 100vh;
+        width: 100%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        flex-direction: column;
+        background: #0c0a09;
+        color: #ffffff;
+        font-weight: 900;
+        font-size: 26px;
+        letter-spacing: 0.2em;
+        text-align: center;
+        user-select: none;
+      }
+      .boot span {
+        display: block;
+        letter-spacing: 0.18em;
+        font-size: 11px;
+        color: #fbbf24;
+        margin-top: 4px;
+        font-weight: 700;
+      }
+      .boot .beans {
+        display: flex;
+        gap: 10px;
+        margin-bottom: 20px;
+      }
+      .boot .beans i {
+        width: 14px;
+        height: 20px;
+        border-radius: 50%;
+        background: #d97706;
+        position: relative;
+        display: block;
+        animation: vtc-bean-hop 0.9s ease-in-out infinite;
+      }
+      .boot .beans i::after {
+        content: "";
+        position: absolute;
+        left: 50%;
+        top: 3px;
+        bottom: 3px;
+        width: 2px;
+        margin-left: -1px;
+        border-radius: 2px;
+        background: #0c0a09;
+        transform: rotate(12deg);
+      }
+      .boot .beans i:nth-child(2) {
+        animation-delay: 0.15s;
+      }
+      .boot .beans i:nth-child(3) {
+        animation-delay: 0.3s;
+      }
+      @keyframes vtc-bean-hop {
+        0%, 100% {
+          transform: translateY(0) rotate(0deg);
+        }
+        50% {
+          transform: translateY(-10px) rotate(-18deg);
+        }
+      }
+      .sr-only {
+        position: absolute;
+        width: 1px;
+        height: 1px;
+        padding: 0;
+        margin: -1px;
+        overflow: hidden;
+        clip: rect(0, 0, 0, 0);
+        white-space: nowrap;
+        border: 0;
+      }
+    </style>
+  </head>
+  <body class="bg-stone-950 text-stone-100 antialiased selection:bg-amber-500/30 selection:text-amber-200">
+    <div id="root">
+      <div id="app">
+        <div class="boot" role="status">
+          <div class="beans" aria-hidden="true"><i></i><i></i><i></i></div>
+          VASAVI<span>TRADING COMPANY</span>
+          <span class="sr-only">Loading…</span>
+        </div>
+      </div>
+    </div>
+    <div id="toast" role="status" aria-live="polite"></div>
+    <noscript>VASAVI TRADING COMPANY — This portal needs JavaScript switched on.</noscript>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

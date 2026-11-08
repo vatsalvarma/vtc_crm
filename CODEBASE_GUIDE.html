@@ -1,0 +1,333 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Vasavi Trading Company (VTC) CRM — Codebase & Architecture Guide</title>
+  <style>
+    :root {
+      --bg: #fbf8f5;
+      --card-bg: #ffffff;
+      --text: #2c1a11;
+      --text-muted: #6b5c54;
+      --primary: #422215;
+      --primary-light: #f3ede7;
+      --border: #e6ded5;
+      --code-bg: #2d1d16;
+      --code-text: #fbeee0;
+      --accent: #2e7d32;
+    }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      background-color: var(--bg);
+      color: var(--text);
+      line-height: 1.6;
+      margin: 0;
+      padding: 24px;
+    }
+    .container {
+      max-width: 1080px;
+      margin: 0 auto;
+      background: var(--card-bg);
+      border-radius: 16px;
+      border: 1px solid var(--border);
+      padding: 40px;
+      box-shadow: 0 4px 24px rgba(66, 34, 21, 0.05);
+    }
+    h1, h2, h3, h4 {
+      color: var(--primary);
+      margin-top: 1.5em;
+      margin-bottom: 0.5em;
+      font-weight: 700;
+    }
+    h1 {
+      margin-top: 0;
+      font-size: 2.2rem;
+      border-bottom: 2px solid var(--border);
+      padding-bottom: 16px;
+    }
+    h2 {
+      font-size: 1.5rem;
+      border-bottom: 1px solid var(--border);
+      padding-bottom: 8px;
+    }
+    p, li {
+      font-size: 1rem;
+      color: #3b281d;
+    }
+    .badge {
+      display: inline-block;
+      background: var(--primary-light);
+      color: var(--primary);
+      padding: 4px 12px;
+      border-radius: 999px;
+      font-size: 0.85rem;
+      font-weight: 600;
+      margin-right: 6px;
+    }
+    .note-box {
+      background: #fbf5ef;
+      border-left: 4px solid var(--primary);
+      padding: 16px 20px;
+      border-radius: 8px;
+      margin: 20px 0;
+    }
+    .diagram-card {
+      background: #faf7f4;
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 24px;
+      margin: 24px 0;
+      overflow-x: auto;
+      text-align: center;
+    }
+    .diagram-card .mermaid {
+      display: inline-block;
+      min-width: 320px;
+    }
+    pre.ascii {
+      background: var(--code-bg);
+      color: var(--code-text);
+      padding: 20px;
+      border-radius: 10px;
+      font-family: "Consolas", "Courier New", monospace;
+      font-size: 0.9rem;
+      line-height: 1.4;
+      overflow-x: auto;
+      text-align: left;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 20px 0;
+    }
+    th, td {
+      border: 1px solid var(--border);
+      padding: 12px 16px;
+      text-align: left;
+    }
+    th {
+      background: var(--primary-light);
+      color: var(--primary);
+      font-weight: 600;
+    }
+    tr:nth-child(even) {
+      background: #faf7f4;
+    }
+    code {
+      background: #f0e6dc;
+      padding: 2px 6px;
+      border-radius: 4px;
+      font-size: 0.9em;
+      color: #5a2608;
+      font-family: monospace;
+    }
+  </style>
+</head>
+<body>
+
+<div class="container">
+  <h1>☕ Vasavi Trading Company (VTC) CRM — Codebase Guide</h1>
+  
+  <div class="note-box">
+    <strong>💡 Welcome!</strong> This interactive HTML document lets you view live rendered <strong>Mermaid SVG diagrams</strong> and <strong>ASCII maps</strong> explaining every file in the project.
+  </div>
+
+  <h2>☕ 1. Big Picture: What is this Project?</h2>
+  <p>Think of this software as the <strong>central nervous system of a coffee roastery & trading business</strong>. It automates and connects all five factory departments so that <strong>no coffee, no money, and no bag is ever lost</strong>.</p>
+  
+  <div class="diagram-card">
+    <h4>📈 Live Mermaid Visual Flow</h4>
+    <div class="mermaid">
+flowchart LR
+    A["🌾 Stock Inward<br/>(Raw Beans In)"] --> B["🔥 Roasting & QC<br/>(Daily Batches)"]
+    B --> C["📦 Packaging<br/>(Packs & Tins)"]
+    C --> D["🏪 Counter Sales<br/>(Retail Bills)"]
+    C --> E["🚚 Outgoing Sales<br/>(Cafes & Dealers)"]
+    D --> F["💰 Finance & Tally<br/>(Cash & Invoices)"]
+    E --> F
+    F --> G["⚙️ Admin Control<br/>(Staff, Roles & Logs)"]
+    </div>
+  </div>
+
+  <h2>🏗️ 2. System Architecture</h2>
+  <p>The application is built as a fast Single Page Application (SPA) using <strong>TypeScript, HTML5, CSS3, and Vite</strong>. It works completely offline using an in-browser <strong>Mock Database</strong>, and is 100% prepared to connect to a Spring Boot / PostgreSQL backend.</p>
+
+  <div class="diagram-card">
+    <h4>📈 Interactive System Architecture Diagram</h4>
+    <div class="mermaid">
+flowchart TD
+    User["👤 User (Owner, Manager, Roaster, Packer)"] --> Browser["🌐 Web Browser (Chrome, Tablet, Mobile)"]
+    Browser --> Main["🚀 src/main.tsx<br/>(App Launcher)"]
+    Main --> Shell["🖼️ src/shell.ts<br/>(Stationary Sidebar + Top Bar)"]
+    Shell --> Router["🧭 src/app.ts<br/>(Screen Switcher & Events)"]
+    
+    Router --> Ops["🌾 ops.ts (Inward & Roasting)"]
+    Router --> Prod["📦 production.ts (Packing & Grinding)"]
+    Router --> Ctr["🏪 counter.ts (Retail Sales)"]
+    Router --> Sales["🚚 sales.ts (B2B & Finance)"]
+    Router --> Admin["⚙️ admin.ts (Admin & People)"]
+    
+    Ops --> API["🔌 src/api.ts (Unified API Bridge)"]
+    Prod --> API
+    Ctr --> API
+    Sales --> API
+    Admin --> API
+    
+    API --> MockDB["🗃️ src/mock-db.ts (Local In-Memory DB)"]
+    API -.-> Backend["🖥️ Backend Server (Spring Boot / SQL)"]
+    </div>
+  </div>
+
+  <h2>📂 3. Directory Map at a Glance</h2>
+  <pre class="ascii">
+vtc-crm/
+├── 📁 backend/                <-- Java Spring Boot 3 & MySQL Backend
+│   ├── 📄 pom.xml             <-- Maven dependencies (Security, JPA, MySQL, JJWT)
+│   └── 📁 src/main/java/com/vtc/crm/
+│       ├── 🚀 VtcCrmApplication.java
+│       ├── 📁 config/         (SecurityConfig, JwtUtil, JwtAuthenticationFilter)
+│       ├── 📁 controller/     (Auth, StaffManagement, Catalog, Operations, Audit)
+│       ├── 📁 entity/         (User, UserProfile, UserDocument, AuditLog, Masters)
+│       ├── 📁 repository/     (Spring Data JPA Repositories)
+│       └── 📁 service/        (AuthService, StaffService, DataInitializer)
+│
+├── 📁 frontend/               <-- Vite + TypeScript Single Page Application
+│   ├── 📄 index.html          <-- Main web page template
+│   ├── 📄 package.json        <-- Frontend dependencies
+│   ├── 📄 vite.config.ts      <-- Proxy /api -> http://127.0.0.1:8080
+│   ├── 📁 public/             <-- Static assets, icons, fonts
+│   └── 📁 src/                <-- Frontend UI Source Code
+│       ├── 🚀 main.tsx        <-- Starting entry point
+│       ├── 🧭 app.ts          <-- Central coordinator & page switcher
+│       ├── 🔌 api.ts          <-- Unified API courier to Spring Boot
+│       ├── 🔐 login.ts        <-- Staff PIN & password sign-in
+│       ├── 🖼️ shell.ts        <-- Stationary sidebar, top bar & navigation
+│       ├── 📊 state.ts        <-- Current session & reactive memory
+│       ├── 🎨 ui.ts           <-- Reusable dialogs, tables & inputs
+│       ├── 📁 views/          <-- 14 coffee factory screens
+│       └── 📁 styles/         <-- Warm coffee palette & layout rules
+│
+├── 📄 CODEBASE_GUIDE.md       <-- Complete architecture & plain-language guide
+└── 📄 CODEBASE_GUIDE.html     <-- Interactive guide with live Mermaid diagrams
+  </pre>
+
+  <h2>🔍 4. Every File Explained in Plain Words</h2>
+
+  <h3>🏢 Core Application Engine</h3>
+  <table>
+    <thead>
+      <tr>
+        <th>File</th>
+        <th>What it does in simple words</th>
+        <th>Real-world coffee analogy</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><code>src/main.tsx</code></td>
+        <td><strong>The Master Key</strong>. The very first file executed when opening the website. Boots the portal and starts the clock.</td>
+        <td>Unlocking the factory gates in the morning.</td>
+      </tr>
+      <tr>
+        <td><code>src/app.ts</code></td>
+        <td><strong>The Floor Supervisor</strong>. Listens to every click, keypress, and form submission. Decides which screen to show.</td>
+        <td>The floor manager directing staff where to go.</td>
+      </tr>
+      <tr>
+        <td><code>src/shell.ts</code></td>
+        <td><strong>The Physical Building</strong>. Renders the stationary left sidebar, user profile capsule, breadcrumbs, and auto-logout timer.</td>
+        <td>The reception area, hallways, and signs on the walls.</td>
+      </tr>
+      <tr>
+        <td><code>src/state.ts</code></td>
+        <td><strong>The Brain's Memory</strong>. Remembers who is signed in (Owner, Manager, Roaster), what permissions they have, and active page.</td>
+        <td>A clipboard holding today's active work notes.</td>
+      </tr>
+      <tr>
+        <td><code>src/ui.ts</code></td>
+        <td><strong>The Toolbox</strong>. Reusable pop-up dialogs, tables, input boxes, badges (ACTIVE, HOLD), and toast alerts.</td>
+        <td>Standard measuring cups, pens, and stamps used in every room.</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <h3>🔌 Data & Network Layer</h3>
+  <table>
+    <thead>
+      <tr>
+        <th>File</th>
+        <th>What it does in simple words</th>
+        <th>Real-world coffee analogy</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><code>src/api.ts</code></td>
+        <td><strong>The Office Courier</strong>. Sends and receives data between screens and database. If offline, safely connects to <code>mock-db.ts</code>.</td>
+        <td>The internal mail clerk carrying order slips between departments.</td>
+      </tr>
+      <tr>
+        <td><code>src/mock-db.ts</code></td>
+        <td><strong>The Browser Ledger</strong>. Stores realistic coffee batches, inventory, customers, and cash right in your browser.</td>
+        <td>A practice company ledger loaded with real business numbers.</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <div class="diagram-card">
+    <h4>📈 Batch Recording Sequence Diagram</h4>
+    <div class="mermaid">
+sequenceDiagram
+    autonumber
+    actor Roaster as 👨‍🍳 Roaster
+    participant OpsView as 🖥️ Daily Roasting (ops.ts)
+    participant API as 🔌 api.ts
+    participant DB as 🗃️ mock-db.ts
+
+    Roaster->>OpsView: Enters 50 kg in, 41.5 kg out
+    OpsView->>OpsView: Calculates loss % (17.0%)
+    OpsView->>API: POST /roasts (batch data)
+    API->>DB: Deducts 50 kg raw green beans
+    API->>DB: Adds 41.5 kg roasted coffee (status: HOLD)
+    DB-->>API: Returns saved batch confirmation
+    API-->>OpsView: Delivers success response
+    OpsView-->>Roaster: Toast: "Batch #3 recorded!"
+    </div>
+  </div>
+
+  <h2>👥 5. User Roles & Hierarchy</h2>
+  <div class="diagram-card">
+    <h4>📈 User Access & Responsibility Hierarchy</h4>
+    <div class="mermaid">
+graph TD
+    Owner["👑 Owner (Demo)<br/>• Full system power<br/>• Can change settings & prices<br/>• Sees private staff documents<br/>• Approves Go-Live & locks numbers"]
+    Admin["🛡️ Office Admin (Demo)<br/>• Admin Control access<br/>• Approves client/supplier drafts<br/>• Resets passwords & PINs<br/>• Manages receivables & payables"]
+    Manager["📋 Demo Manager<br/>• Floor oversight<br/>• Approves packing & QC holds<br/>• B2B orders & dispatch<br/>• Suggests master records"]
+    Roaster["🔥 Demo Roaster<br/>• Guided daily roasting screen<br/>• Weighs input and output<br/>• Tap Name + PIN login"]
+    Packer["📦 Demo Packer<br/>• Packing tickets & pouch sealing<br/>• Stock transfers<br/>• Tap Name + PIN login"]
+
+    Owner --> Admin
+    Admin --> Manager
+    Manager --> Roaster
+    Manager --> Packer
+    </div>
+  </div>
+
+  <h2>💡 Quick Cheat Sheet</h2>
+  <ul>
+    <li>To edit <strong>Retail Counter sales & billing</strong>: check <code>src/views/counter.ts</code></li>
+    <li>To edit <strong>Daily Roasting or QC rules</strong>: check <code>src/views/ops.ts</code></li>
+    <li>To edit <strong>Staff, PINs or Roles</strong>: check <code>src/views/admin.ts</code></li>
+    <li>To edit <strong>Sample Data & Balances</strong>: check <code>src/mock-db.ts</code></li>
+    <li>To edit <strong>Colors & Layout rules</strong>: check <code>src/styles/preview-theme.css</code></li>
+  </ul>
+</div>
+
+<script type="module">
+  import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.esm.min.mjs';
+  mermaid.initialize({ startOnLoad: true, theme: 'neutral' });
+</script>
+</body>
+</html>
+

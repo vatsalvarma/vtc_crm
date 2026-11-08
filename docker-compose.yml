@@ -1,0 +1,56 @@
+services:
+  db:
+    image: mysql:8.0
+    container_name: vtc-crm-db
+    restart: unless-stopped
+    command: --default-authentication-plugin=mysql_native_password
+    environment:
+      MYSQL_DATABASE: vtc_crm_db
+      MYSQL_ROOT_PASSWORD: ${DB_ROOT_PASSWORD:-1000}
+    volumes:
+      - vtc_db_data:/var/lib/mysql
+    networks:
+      - vtc-net
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -u root -p$$MYSQL_ROOT_PASSWORD"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: vtc-crm-backend
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      DB_URL: jdbc:mysql://db:3306/vtc_crm_db?createDatabaseIfNotExist=true&useSSL=false&serverTimezone=UTC&allowPublicKeyRetrieval=true
+      DB_USER: root
+      DB_PASSWORD: ${DB_ROOT_PASSWORD:-1000}
+      JWT_SECRET: ${JWT_SECRET:-vasavi-trading-company-super-secret-jwt-key-2026-coffee-enterprise-crm}
+    networks:
+      - vtc-net
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: vtc-crm-frontend
+    restart: unless-stopped
+    ports:
+      - "${APP_PORT:-8088}:80"
+    depends_on:
+      - backend
+    networks:
+      - vtc-net
+
+volumes:
+  vtc_db_data:
+
+networks:
+  vtc-net:
+    driver: bridge
