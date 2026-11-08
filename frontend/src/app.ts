@@ -25,10 +25,15 @@ import { dispatch, exceptions, finance, orders, reports, salesClick, salesSubmit
 const ALL_VIEWS: Record<string, any> = { ...VIEWS, profile, admin, maintenance, team, comms, counter, blending, outside, packing, orders, dispatch, finance, exceptions, reports };
 
 async function refreshMe() {
-  S.me = await api("/me");
-  usePortalStore.getState().sync({ me: S.me });
-  setLang(S.me.prefs.lang);
-  try { setOverrides(await api("/i18n")); } catch { /* wording overrides are optional */ }
+  try {
+    S.me = await api("/me");
+    usePortalStore.getState().sync({ me: S.me });
+    setLang(S.me?.prefs?.lang || "en");
+    try { setOverrides(await api("/i18n")); } catch { /* wording overrides are optional */ }
+  } catch (err: any) {
+    console.error("refreshMe error:", err);
+    throw err;
+  }
 }
 
 async function load() {
