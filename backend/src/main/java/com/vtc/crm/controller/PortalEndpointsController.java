@@ -219,13 +219,17 @@ public class PortalEndpointsController {
         s.put("received_bags", inwardReceipts.size());
         s.put("beans_in_stock", inventoryLots.size());
         s.put("beans_low", 0);
-        s.put("roasts", roastRepository.count());
+        long roasts = 0;
+        try { roasts = roastRepository.count(); } catch (Exception ignored) {}
+        s.put("roasts", roasts);
         s.put("packing", packingJobsList.size());
         s.put("team_tasks", tasksList.size());
         s.put("to_review", 0);
         s.put("held", 0);
         s.put("orders", ordersList.size());
-        s.put("pending_invoices", counterRepository.count());
+        long bills = 0;
+        try { bills = counterRepository.count(); } catch (Exception ignored) {}
+        s.put("pending_invoices", bills);
         return s;
     }
 

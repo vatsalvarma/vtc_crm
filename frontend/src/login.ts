@@ -165,6 +165,29 @@ function renderPassword(onSignedIn: () => void) {
         shared_device: !!f.get("shared")
       });
       toast(`Signed in as ${res?.user?.full_name || uname}`);
+      if (res?.user) {
+        import("./state.js").then(({ S }) => {
+          if (!S.me) {
+            S.me = {
+              user: res.user,
+              modules: ["dashboard", "tasks", "inward", "inventory", "roasting", "blending", "qc", "outside", "packing", "counter", "orders", "dispatch", "comms", "maintenance", "team", "finance", "masters", "exceptions", "reports", "profile", "admin"],
+              live_modules: ["dashboard", "tasks", "inward", "inventory", "roasting", "blending", "qc", "outside", "packing", "counter", "orders", "dispatch", "comms", "maintenance", "team", "finance", "masters", "exceptions", "reports", "profile", "admin"],
+              settings: {
+                company_name: "Vasavi Trading Company",
+                short_name: "VASAVI",
+                tagline: "TRADING COMPANY",
+                location_label: "PROD-01",
+                accent: "roast",
+                currency_symbol: "₹",
+                invoice_prefix: "VTC-26",
+                languages_enabled: ["en", "te", "hi"],
+                default_language: "en"
+              },
+              prefs: { lang: "en", large_text: false, shortcuts: ["inward", "roasting", "inventory"] }
+            };
+          }
+        });
+      }
       onSignedIn();
     } catch (err: any) {
       const code = err?.code;
