@@ -60,6 +60,8 @@ public class SecurityConfig {
         config.setAllowedOriginPatterns(Arrays.asList(
             "http://localhost:*",
             "http://127.0.0.1:*",
+            "https://crm.teancoffeeindia.com",
+            "http://crm.teancoffeeindia.com",
             "https://*.teancoffeeindia.com",
             "http://*.teancoffeeindia.com",
             "https://teancoffeeindia.com",
