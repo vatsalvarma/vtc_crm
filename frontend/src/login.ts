@@ -167,7 +167,12 @@ function renderPassword(onSignedIn: () => void) {
       toast(`Signed in as ${res?.user?.full_name || uname}`);
       onSignedIn();
     } catch (err: any) {
-      toast(errorText(err.code || "INVALID_CREDENTIALS"), true);
+      const code = err?.code;
+      if (code === "LOGIN_REQUIRED" || code === "INVALID_CREDENTIALS") {
+        toast("Invalid credentials. Default is owner / admin123", true);
+      } else {
+        toast(errorText(code || "INVALID_CREDENTIALS"), true);
+      }
     }
   });
 }

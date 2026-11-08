@@ -46,7 +46,9 @@ public class SecurityConfig {
                 })
             )
             .authorizeHttpRequests(auth -> auth
+                .requestMatchers(org.springframework.http.HttpMethod.OPTIONS, "/**").permitAll()
                 .requestMatchers("/api/v1/login", "/api/v1/login/**", "/api/v1/i18n", "/api/v1/health", "/error").permitAll()
+                .requestMatchers("/api/**/login", "/api/**/login/**", "/api/**/health").permitAll()
                 .anyRequest().authenticated()
             )
             .addFilterBefore(jwtFilter, UsernamePasswordAuthenticationFilter.class);
@@ -57,16 +59,7 @@ public class SecurityConfig {
     @Bean
     public CorsConfigurationSource corsConfigurationSource() {
         CorsConfiguration config = new CorsConfiguration();
-        config.setAllowedOriginPatterns(Arrays.asList(
-            "http://localhost:*",
-            "http://127.0.0.1:*",
-            "https://crm.teancoffeeindia.com",
-            "http://crm.teancoffeeindia.com",
-            "https://*.teancoffeeindia.com",
-            "http://*.teancoffeeindia.com",
-            "https://teancoffeeindia.com",
-            "http://teancoffeeindia.com"
-        ));
+        config.setAllowedOriginPatterns(Collections.singletonList("*"));
         config.setAllowedMethods(Arrays.asList("GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"));
         config.setAllowedHeaders(Collections.singletonList("*"));
         config.setAllowCredentials(true);

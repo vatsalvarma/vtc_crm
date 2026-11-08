@@ -42,12 +42,13 @@ public class AuthController {
     public ResponseEntity<?> loginWithPin(@RequestBody Map<String, Object> body) {
         try {
             Long userId = Long.valueOf(body.get("user_id").toString());
-            String pin = (String) body.get("pin");
+            String pin = body.get("pin") != null ? body.get("pin").toString().trim() : "";
             Map<String, Object> result = authService.loginWithPin(userId, pin);
             return ResponseEntity.ok(result);
         } catch (Exception e) {
             Map<String, Object> err = new HashMap<>();
-            err.put("error", e.getMessage());
+            String msg = e.getMessage();
+            err.put("error", (msg != null && !msg.isBlank()) ? msg : "WRONG_PIN");
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(err);
         }
     }
@@ -55,13 +56,14 @@ public class AuthController {
     @PostMapping("/login")
     public ResponseEntity<?> loginWithPassword(@RequestBody Map<String, Object> body) {
         try {
-            String username = (String) body.get("username");
-            String password = (String) body.get("password");
+            String username = body.get("username") != null ? body.get("username").toString().trim() : "";
+            String password = body.get("password") != null ? body.get("password").toString().trim() : "";
             Map<String, Object> result = authService.loginWithPassword(username, password);
             return ResponseEntity.ok(result);
         } catch (Exception e) {
             Map<String, Object> err = new HashMap<>();
-            err.put("error", e.getMessage());
+            String msg = e.getMessage();
+            err.put("error", (msg != null && !msg.isBlank()) ? msg : "INVALID_CREDENTIALS");
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(err);
         }
     }

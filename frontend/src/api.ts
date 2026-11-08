@@ -107,7 +107,8 @@ export async function api(path: string, method = "GET", body: any = null, idempo
       const data: any = await res.json().catch(() => ({}));
       clearAuthToken();
       if (!path.startsWith("/login")) onSignedOut(data.error || "LOGIN_REQUIRED");
-      throw new ApiError(data.error || "LOGIN_REQUIRED", res.status);
+      const defaultErr = path.startsWith("/login") ? "INVALID_CREDENTIALS" : "LOGIN_REQUIRED";
+      throw new ApiError(data.error || defaultErr, res.status);
     }
 
     if (res.status === 404) {

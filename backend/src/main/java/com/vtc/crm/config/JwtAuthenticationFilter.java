@@ -36,16 +36,20 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
         if (token != null && jwtUtil.validateToken(token)) {
             String username = jwtUtil.extractUsername(token);
-            Optional<User> userOpt = userRepository.findByUsername(username);
+            if (username != null) {
+                Optional<User> userOpt = userRepository.findByUsername(username)
+                        .or(() -> userRepository.findByUsername(username.toLowerCase()));
 
-            if (userOpt.isPresent() && "ACTIVE".equals(userOpt.get().getStatus())) {
-                User user = userOpt.get();
-                UsernamePasswordAuthenticationToken auth = new UsernamePasswordAuthenticationToken(
-                        user,
-                        null,
-                        Collections.singletonList(new SimpleGrantedAuthority("ROLE_" + user.getRole().toUpperCase()))
-                );
-                SecurityContextHolder.getContext().setAuthentication(auth);
+                if (userOpt.isPresent() && "ACTIVE".equalsIgnoreCase(userOpt.get().getStatus())) {
+                    User user = userOpt.get();
+                    String role = user.getRole() != null ? user.getRole().toUpperCase() : "STAFF";
+                    UsernamePasswordAuthenticationToken auth = new UsernamePasswordAuthenticationToken(
+                            user,
+                            null,
+                            Collections.singletonList(new SimpleGrantedAuthority("ROLE_" + role))
+                    );
+                    SecurityContextHolder.getContext().setAuthentication(auth);
+                }
             }
         }
 
@@ -55,7 +59,14 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
     private String resolveToken(HttpServletRequest request) {
         String bearer = request.getHeader("Authorization");
         if (bearer != null && bearer.startsWith("Bearer ")) {
-            return bearer.substring(7);
+            return bearer.substring(7).trim();
+        }
+        if (request.getCookies() != null) {
+            for (Cookie c : request.getCookies()) {
+                if ("vtc_token".equals(c.getName()) && c.getValue() != null && !c.getValue().isEmpty()) {
+                    return c.getValue();
+                }
+            }
         }
         return null;
     }
