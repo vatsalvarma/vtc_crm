@@ -47,7 +47,12 @@ const dashboard = {
     };
     // Next job: work already started first, then the earliest due, then the oldest.
     const rank = { IN_PROGRESS: 0, BLOCKED: 1, OPEN: 2 };
-    const mine = d("/tasks").filter((x) => !["DONE", "SUBMITTED"].includes(x.status) && x.assigned_to === u.id)
+    const isMine = (x) => Boolean(
+      x.mine ||
+      (x.assigned_to != null && u?.id != null && (x.assigned_to == u.id || Number(x.assigned_to) === Number(u.id))) ||
+      (x.assignee && u?.full_name && x.assignee.trim().toLowerCase() === u.full_name.trim().toLowerCase())
+    );
+    const mine = d("/tasks").filter((x) => !["DONE", "SUBMITTED"].includes(x.status) && isMine(x))
       .sort((a, b) => (rank[a.status] ?? 3) - (rank[b.status] ?? 3) || String(a.due || "9").localeCompare(String(b.due || "9")) || a.id - b.id);
     const next = mine[0];
     const nextCard = tier() === "staff" ? `<section class="card next-job span12" style="--sec:${SECTION[NEXT_GO[next?.kind]]?.color || "#805039"}">
@@ -305,22 +310,39 @@ const qc = {
 
 // ---------------------------------------------------------------- tasks
 const STATUS_LABEL = { OPEN: "not started", IN_PROGRESS: "in progress", BLOCKED: "stuck", SUBMITTED: "waiting for review", DONE: "approved" };
-const tsub = () => (S.sub ||= { filter: "open" });
+const tsub = () => {
+  if (!S.sub || !S.sub.filter) {
+    S.sub = { filter: tier() === "staff" ? "mine" : "open" };
+  }
+  return S.sub;
+};
 
 const tasks = {
   paths: () => ["/tasks"],
   render() {
     const all = d("/tasks"), me = S.me.user.id, f = tsub().filter;
+    const isMine = (x) => Boolean(
+      x.mine ||
+      (x.assigned_to != null && me != null && (x.assigned_to == me || Number(x.assigned_to) === Number(me))) ||
+      (x.assignee && S.me?.user?.full_name && x.assignee.trim().toLowerCase() === S.me.user.full_name.trim().toLowerCase())
+    );
     const review = all.filter((x) => x.may_review);
-    const lists = { open: all.filter((x) => x.status !== "DONE"), review, mine: all.filter((x) => x.assigned_to === me && x.status !== "DONE"), done: all.filter((x) => x.status === "DONE") };
-    const rows = lists[f] || lists.open;
-    const filters = [["open", "Open"], ["review", `To review (${review.length})`], ["mine", "My work"], ["done", "Approved"]];
+    const lists = {
+      mine: all.filter((x) => isMine(x) && x.status !== "DONE"),
+      open: all.filter((x) => x.status !== "DONE"),
+      review,
+      done: all.filter((x) => x.status === "DONE" && (tier() === "staff" ? isMine(x) : true))
+    };
+    const rows = lists[f] || (tier() === "staff" ? lists.mine : lists.open);
+    const filters = tier() === "staff"
+      ? [["mine", `My work (${lists.mine.length})`], ["open", `All Open (${lists.open.length})`], ["review", `To review (${review.length})`], ["done", "Approved"]]
+      : [["open", `All Open (${lists.open.length})`], ["mine", `My work (${lists.mine.length})`], ["review", `To review (${review.length})`], ["done", "Approved"]];
     return pageHead(eyebrow(), t("tasks"), "Work linked to roasting, packing, QC, outside roasting, counter and dispatch counts itself. When done, the person marks it completed and the assigner approves.",
       can("tasks.assign") ? '<button class="btn btn-primary" data-action="newTask">+ Assign work</button>' : "") +
       `<div class="tabs">${filters.map(([k, l]) => `<button class="tab ${f === k ? "on" : ""}" data-tfilter="${k}">${l}</button>`).join("")}</div>
       <section class="card">${table(["Work", "Who", "Progress", "Status", ""], rows.map((x) => {
-        const mine = x.assigned_to === me, open = ["OPEN", "IN_PROGRESS", "BLOCKED"].includes(x.status);
-        const mayUpdate = open && (can("tasks.update_any") || (can("tasks.update_own") && mine));
+        const mine = isMine(x), open = ["OPEN", "IN_PROGRESS", "BLOCKED"].includes(x.status);
+        const mayUpdate = open && (can("tasks.update_any") || (can("tasks.update_own") && mine) || mine);
         const pct = x.target ? Math.min(100, (x.progress / x.target) * 100) : null;
         return `<tr><td><b>${h(x.title)}</b><br><span class="tiny">${h(x.kind_label)}${x.due ? ` · due ${h(x.due)}` : ""} · by ${h(x.assigned_by || "—")}</span>
             ${x.submit_note ? `<br><span class="tiny">Note: ${h(x.submit_note)}</span>` : ""}${x.review_note ? `<br><span class="tiny">${x.status === "DONE" ? "Approved" : "Sent back"} by ${h(x.reviewed_by_name || "")}: ${h(x.review_note)}</span>` : ""}</td>
@@ -331,7 +353,7 @@ const tasks = {
             mayUpdate && x.kind === "GENERAL" ? `<button class="btn btn-small" data-task="${x.id}">Update</button> ` : ""}${
             mayUpdate && x.kind !== "GENERAL" ? `<button class="btn btn-small btn-quiet" data-tstuck="${x.id}:${x.status === "BLOCKED" ? 0 : 1}">${x.status === "BLOCKED" ? "Not stuck now" : "I'm stuck"}</button> ` : ""}${
             open && mine ? `<button class="btn btn-small ${x.target != null && x.progress >= x.target ? "btn-primary" : ""}" data-tsubmit="${x.id}">✓ Mark completed</button> ` : ""}${discussBtn("task", x.id)}</td></tr>`;
-      }), f === "review" ? "Nothing waiting for your review." : "No work here.")}</section>`;
+      }), f === "review" ? "Nothing waiting for your review." : f === "mine" ? "No work assigned to you right now." : "No work here.")}</section>`;
   },
 };
 

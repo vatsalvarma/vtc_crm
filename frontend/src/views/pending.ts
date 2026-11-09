@@ -30,13 +30,18 @@ export function pendingPanel(view: string) {
   const tList = Array.isArray(p.tasks) ? p.tasks : [];
   const wList = Array.isArray(p.waiting) ? p.waiting : [];
   const rows = tList.map((t: any) => {
+    const isMine = Boolean(
+      t.mine ||
+      (t.assigned_to != null && me != null && (t.assigned_to == me || Number(t.assigned_to) === Number(me))) ||
+      (t.assignee && S.me?.user?.full_name && t.assignee.trim().toLowerCase() === S.me.user.full_name.trim().toLowerCase())
+    );
     const pct = t.target ? Math.min(100, (t.progress / t.target) * 100) : null, open = ["OPEN", "IN_PROGRESS", "BLOCKED"].includes(t.status);
     return `<li class="pend-item ${t.status === "BLOCKED" ? "stuck" : ""}">
       <span class="pend-ic">${icon(t.status === "SUBMITTED" ? "hourglass" : t.status === "BLOCKED" ? "circle-alert" : "clipboard-list", 18)}</span>
-      <div class="pend-main"><b>${h(t.title)}</b><span class="tiny">${t.mine ? "For you" : h(t.assignee || "Unassigned")}${t.due ? ` · due ${h(t.due)}` : ""} · ${h(STATUS[t.status] || t.status)}</span>
+      <div class="pend-main"><b>${h(t.title)}</b><span class="tiny">${isMine ? "For you" : h(t.assignee || "Unassigned")}${t.due ? ` · due ${h(t.due)}` : ""} · ${h(STATUS[t.status] || t.status)}</span>
         ${pct != null ? `<div class="bar"><span style="width:${pct}%"></span></div><span class="tiny">${num(t.progress)} of ${num(t.target)} ${h(t.unit)}</span>` : ""}</div>
       <div class="pend-act">${t.may_review ? `<button class="btn btn-small btn-primary" data-treview="${t.id}:1">Approve</button><button class="btn btn-small" data-treview="${t.id}:0">Send back</button>` : ""}${
-        open && t.assigned_to === me ? `<button class="btn btn-small ${t.target != null && t.progress >= t.target ? "btn-primary" : ""}" data-tsubmit="${t.id}">${icon("circle-check", 14)} Mark completed</button>` : ""}</div></li>`;
+        open && isMine ? `<button class="btn btn-small ${t.target != null && t.progress >= t.target ? "btn-primary" : ""}" data-tsubmit="${t.id}">${icon("circle-check", 14)} Mark completed</button>` : ""}</div></li>`;
   }).join("");
   const waits = wList.map((w: any) => `<li class="pend-item wait"><span class="pend-ic">${icon("bell", 18)}</span><div class="pend-main"><b>${w.count} ${h(w.label)}</b><span class="tiny">Waiting below on this screen</span></div></li>`).join("");
   return `<section class="pend-card" style="--sec:${sec.color || "#805039"}" aria-label="Pending here">
@@ -45,5 +50,5 @@ export function pendingPanel(view: string) {
 }
 
 // the task buttons in the panel reuse the My Work handlers; they look tasks up here
-export const pendingTask = (id: any) => Object.values<any>(S.pending || {}).flatMap((x: any) => x.tasks).find((t: any) => t.id === Number(id));
+export const pendingTask = (id: any) => Object.values<any>(S.pending || {}).flatMap((x: any) => x.tasks || []).find((t: any) => t && t.id === Number(id));
 export { tag };

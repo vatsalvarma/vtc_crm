@@ -357,7 +357,15 @@ public class PortalEndpointsController {
         boolean mayReview = "SUBMITTED".equalsIgnoreCase(t.getStatus()) && (isAssigner || isBoss || currentUser == null);
         map.put("may_review", mayReview);
 
-        boolean isMine = currentUser != null && Objects.equals(currentUser.getId(), t.getAssignedTo());
+        boolean isMine = false;
+        if (currentUser != null) {
+            if (currentUser.getId() != null && Objects.equals(currentUser.getId(), t.getAssignedTo())) {
+                isMine = true;
+            } else if (currentUser.getFullName() != null && t.getAssignee() != null &&
+                    currentUser.getFullName().trim().equalsIgnoreCase(t.getAssignee().trim())) {
+                isMine = true;
+            }
+        }
         map.put("mine", isMine);
 
         return map;
@@ -396,6 +404,9 @@ public class PortalEndpointsController {
                 task.setAssignedTo(uid);
                 userRepository.findById(uid).ifPresent(u -> task.setAssignee(u.getFullName()));
             } catch (Exception ignored) {}
+        }
+        if (task.getAssignee() == null && req.get("assignee") != null) {
+            task.setAssignee(req.get("assignee").toString());
         }
 
         if (currentUser != null) {
