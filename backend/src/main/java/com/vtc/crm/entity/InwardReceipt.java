@@ -137,3 +137,4 @@ public class InwardReceipt {
     public String getReverseReason() { return reverseReason; }
     public void setReverseReason(String reverseReason) { this.reverseReason = reverseReason; }
 }
+

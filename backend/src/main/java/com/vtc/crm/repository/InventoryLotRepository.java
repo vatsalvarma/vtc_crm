@@ -12,3 +12,4 @@ public interface InventoryLotRepository extends JpaRepository<InventoryLot, Long
     List<InventoryLot> findByReceiptId(Long receiptId);
     List<InventoryLot> findByStatusNot(String status);
 }
+

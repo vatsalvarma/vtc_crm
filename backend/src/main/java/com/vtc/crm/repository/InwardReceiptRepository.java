@@ -14,3 +14,4 @@ public interface InwardReceiptRepository extends JpaRepository<InwardReceipt, Lo
     @Query("SELECT COALESCE(SUM(r.bags), 0) FROM InwardReceipt r WHERE r.reversedAt IS NULL")
     Long sumTotalActiveBags();
 }
+

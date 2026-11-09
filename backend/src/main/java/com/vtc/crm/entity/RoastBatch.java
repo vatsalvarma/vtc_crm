@@ -32,6 +32,24 @@ public class RoastBatch {
     @Column(nullable = false, length = 20)
     private String qcStatus = "HOLD"; // "HOLD", "APPROVED", "REJECTED"
 
+    @Column
+    private Integer durationMin = 12;
+
+    @Column
+    private Boolean abnormal = false;
+
+    @Column(columnDefinition = "TEXT")
+    private String operatorNotes;
+
+    @Column(length = 255)
+    private String inputsSummary;
+
+    @Column
+    private Long outputLotId;
+
+    @Column(length = 50)
+    private String outputLotCode;
+
     @Column(nullable = false)
     private LocalDateTime createdAt = LocalDateTime.now();
 
@@ -60,6 +78,24 @@ public class RoastBatch {
 
     public String getQcStatus() { return qcStatus; }
     public void setQcStatus(String qcStatus) { this.qcStatus = qcStatus; }
+
+    public Integer getDurationMin() { return durationMin; }
+    public void setDurationMin(Integer durationMin) { this.durationMin = durationMin; }
+
+    public Boolean getAbnormal() { return abnormal; }
+    public void setAbnormal(Boolean abnormal) { this.abnormal = abnormal; }
+
+    public String getOperatorNotes() { return operatorNotes; }
+    public void setOperatorNotes(String operatorNotes) { this.operatorNotes = operatorNotes; }
+
+    public String getInputsSummary() { return inputsSummary; }
+    public void setInputsSummary(String inputsSummary) { this.inputsSummary = inputsSummary; }
+
+    public Long getOutputLotId() { return outputLotId; }
+    public void setOutputLotId(Long outputLotId) { this.outputLotId = outputLotId; }
+
+    public String getOutputLotCode() { return outputLotCode; }
+    public void setOutputLotCode(String outputLotCode) { this.outputLotCode = outputLotCode; }
 
     public LocalDateTime getCreatedAt() { return createdAt; }
     public void setCreatedAt(LocalDateTime createdAt) { this.createdAt = createdAt; }
