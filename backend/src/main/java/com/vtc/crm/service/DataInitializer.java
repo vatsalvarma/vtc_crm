@@ -6,6 +6,8 @@ import org.springframework.boot.CommandLineRunner;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Component;
 
+import java.time.LocalDateTime;
+
 @Component
 public class DataInitializer implements CommandLineRunner {
 
@@ -14,6 +16,8 @@ public class DataInitializer implements CommandLineRunner {
     private final UserDocumentRepository docRepository;
     private final MasterRecordRepository masterRepository;
     private final TaskRepository taskRepository;
+    private final ConversationRepository conversationRepository;
+    private final MessageRepository messageRepository;
     private final PasswordEncoder passwordEncoder;
 
     public DataInitializer(
@@ -22,12 +26,16 @@ public class DataInitializer implements CommandLineRunner {
             UserDocumentRepository docRepository,
             MasterRecordRepository masterRepository,
             TaskRepository taskRepository,
+            ConversationRepository conversationRepository,
+            MessageRepository messageRepository,
             PasswordEncoder passwordEncoder) {
         this.userRepository = userRepository;
         this.profileRepository = profileRepository;
         this.docRepository = docRepository;
         this.masterRepository = masterRepository;
         this.taskRepository = taskRepository;
+        this.conversationRepository = conversationRepository;
+        this.messageRepository = messageRepository;
         this.passwordEncoder = passwordEncoder;
     }
 
@@ -35,6 +43,7 @@ public class DataInitializer implements CommandLineRunner {
     public void run(String... args) {
         seedUsersAndMasters();
         seedTasks();
+        seedComms();
     }
 
     private void seedUsersAndMasters() {
@@ -212,6 +221,68 @@ public class DataInitializer implements CommandLineRunner {
             t4.setAssignee("Ramesh (Roaster)");
         }
         taskRepository.save(t4);
+    }
+
+    private void seedComms() {
+        if (conversationRepository.count() > 0) return;
+
+        User owner = userRepository.findByUsername("owner").orElse(null);
+        String ownerName = owner != null ? owner.getFullName() : "Owner";
+        Long ownerId = owner != null ? owner.getId() : 1L;
+
+        // 1. Announcements
+        Conversation ann = new Conversation("Announcements", "announcement", "*");
+        ann.setLastMessageAuthor(ownerName);
+        ann.setLastMessageBody("Stock count this Saturday at 8 am. Everyone attend.");
+        ann.setLastMessageAt(LocalDateTime.now().minusHours(2));
+        Conversation savedAnn = conversationRepository.save(ann);
+
+        Message m1 = new Message(
+                savedAnn.getId(),
+                ownerId,
+                ownerName,
+                "Admin",
+                "Stock count this Saturday at 8 am. Everyone attend.",
+                "all"
+        );
+        m1.setCreatedAt(LocalDateTime.now().minusHours(2));
+        messageRepository.save(m1);
+
+        // 2. Office / Accounts
+        Conversation grp1 = new Conversation("Office / Accounts", "group", "1,2,3");
+        grp1.setLastMessageAuthor(ownerName);
+        grp1.setLastMessageBody("Welcome to the Office & Accounts team channel.");
+        grp1.setLastMessageAt(LocalDateTime.now().minusHours(1));
+        Conversation savedGrp1 = conversationRepository.save(grp1);
+
+        Message m2 = new Message(
+                savedGrp1.getId(),
+                ownerId,
+                ownerName,
+                "Admin",
+                "Welcome to the Office & Accounts team channel.",
+                "all"
+        );
+        m2.setCreatedAt(LocalDateTime.now().minusHours(1));
+        messageRepository.save(m2);
+
+        // 3. Roastery & Main Store
+        Conversation grp2 = new Conversation("Roastery & Main Store", "group", "1,3,4,5");
+        grp2.setLastMessageAuthor("Ramesh (Roaster)");
+        grp2.setLastMessageBody("Roaster is warmed up and ready for batch 1.");
+        grp2.setLastMessageAt(LocalDateTime.now().minusMinutes(30));
+        Conversation savedGrp2 = conversationRepository.save(grp2);
+
+        Message m3 = new Message(
+                savedGrp2.getId(),
+                4L,
+                "Ramesh (Roaster)",
+                "Staff",
+                "Roaster is warmed up and ready for batch 1.",
+                "all"
+        );
+        m3.setCreatedAt(LocalDateTime.now().minusMinutes(30));
+        messageRepository.save(m3);
     }
 }
 

@@ -74,13 +74,5 @@ public class AdminMiscController {
     public Map<String, Object> getPending() {
         return Collections.emptyMap();
     }
-
-    @GetMapping("/comms/badge")
-    public Map<String, Object> getCommsBadge() {
-        Map<String, Object> map = new HashMap<>();
-        map.put("messages", 0);
-        map.put("alerts", 0);
-        return map;
-    }
 }
 

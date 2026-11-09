@@ -193,17 +193,90 @@ export async function refreshBadge() {
   } catch { return null; }
 }
 
-let poller;
+let poller: any;
+let chatWs: WebSocket | null = null;
+let reconnectTimer: any = null;
+
+export function connectChatWs() {
+  if (chatWs && (chatWs.readyState === WebSocket.OPEN || chatWs.readyState === WebSocket.CONNECTING)) {
+    return;
+  }
+  const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
+  const wsUrl = `${protocol}//${window.location.host}/ws/comms`;
+
+  try {
+    chatWs = new WebSocket(wsUrl);
+
+    chatWs.onopen = () => {
+      console.log("[ChatWS] Connected to live chat WebSocket");
+    };
+
+    chatWs.onmessage = (event) => {
+      try {
+        const data = JSON.parse(event.data);
+        if (data.type === "NEW_MESSAGE") {
+          const convId = Number(data.conversation_id);
+          const newMsg = data.message;
+
+          if (S.view === "comms" && S.sub?.conv === convId) {
+            const threadData = S.data[`/comms/conversations/${convId}`];
+            if (threadData && Array.isArray(threadData.messages)) {
+              if (!threadData.messages.some((m: any) => m.id === newMsg.id)) {
+                threadData.messages.push(newMsg);
+                const msgsBox = document.getElementById("msgs");
+                if (msgsBox) {
+                  const me = S.me?.user?.id;
+                  const div = document.createElement("div");
+                  div.innerHTML = bubble(newMsg, me);
+                  const bubbleEl = div.firstElementChild;
+                  if (bubbleEl) msgsBox.appendChild(bubbleEl);
+                  msgsBox.scrollTop = msgsBox.scrollHeight;
+                }
+              }
+            } else {
+              nav.go("comms", S.sub);
+            }
+          } else {
+            refreshBadge();
+          }
+        }
+      } catch (err) {
+        console.warn("[ChatWS] Message parse error:", err);
+      }
+    };
+
+    chatWs.onclose = () => {
+      chatWs = null;
+      clearTimeout(reconnectTimer);
+      reconnectTimer = setTimeout(connectChatWs, 3000);
+    };
+
+    chatWs.onerror = () => {
+      chatWs?.close();
+    };
+  } catch (e) {
+    console.warn("[ChatWS] Connection error:", e);
+  }
+}
+
 export function startPolling() {
   clearInterval(poller);
   refreshBadge();
+  connectChatWs();
   poller = setInterval(async () => {
     const before = document.querySelector("[data-badge]")?.textContent;
     const [b] = await Promise.all([refreshBadge(), loadPending()]);
     if (b && S.view === "comms" && S.sub?.conv && String(b.messages + b.alerts) !== before && !document.querySelector("form[data-compose] textarea:focus")) nav.go("comms", S.sub);
   }, 20000);
 }
-export const stopPolling = () => clearInterval(poller);
+export const stopPolling = () => {
+  clearInterval(poller);
+  clearTimeout(reconnectTimer);
+  if (chatWs) {
+    chatWs.close();
+    chatWs = null;
+  }
+};
 
 // ------------------------------------------------------------------ events
 export async function commsClick(el) {
@@ -220,8 +293,11 @@ export async function commsClick(el) {
     try {
       const people = await api("/comms/contacts");
       if (!people.length) return toast("There is nobody you can start a direct chat with.", true), true;
-      const r = await dialog({ title: "New direct chat", submit: "Open chat", body: select("user_id", "Who?", people.map((p) => [p.id, `${p.full_name} · ${p.role_name}`])) +
-        (S.me.user.tier === "staff" ? '<p class="hint">Staff chat with their manager. Use your team group for everyone else.</p>' : "") });
+      const r = await dialog({
+        title: "New direct chat",
+        submit: "Open chat",
+        body: select("user_id", "Who?", people.map((p) => [p.id, `${p.full_name} · ${p.role_name}`]))
+      });
       if (!r) return true;
       const { id } = await api("/comms/direct", "POST", { user_id: Number(r.user_id) });
       S.sub = { conv: id };
