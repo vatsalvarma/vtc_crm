@@ -20,3 +20,4 @@ public interface ConversationRepository extends JpaRepository<Conversation, Long
 
     Optional<Conversation> findByRecordTypeAndRecordId(String recordType, Long recordId);
 }
+

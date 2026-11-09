@@ -258,8 +258,7 @@ public class CommsController {
     }
 
     // 6. Record discussion thread (e.g. task, roast, order)
-    @GetMapping({"/comms/record/{type}/{id}", "/comms/record/{type}/{id}"})
-    @PostMapping({"/comms/record/{type}/{id}", "/comms/record/{type}/{id}"})
+    @RequestMapping(value = "/comms/record/{type}/{id}", method = {RequestMethod.GET, RequestMethod.POST})
     public ResponseEntity<?> getRecordThread(
             @PathVariable String type,
             @PathVariable Long id,
@@ -335,3 +334,4 @@ public class CommsController {
         return mm;
     }
 }
+

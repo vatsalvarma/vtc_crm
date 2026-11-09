@@ -14,3 +14,4 @@ public interface MessageRepository extends JpaRepository<Message, Long> {
 
     List<Message> findTop100ByConversationIdOrderByCreatedAtAsc(Long conversationId);
 }
+
