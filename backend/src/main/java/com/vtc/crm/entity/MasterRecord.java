@@ -35,6 +35,10 @@ public class MasterRecord {
     @Column(columnDefinition = "TEXT")
     private String metaJson;
 
+    @Column(name = "nominal_kg")
+    @com.fasterxml.jackson.annotation.JsonProperty("nominal_kg")
+    private Double nominalKg = 60.0;
+
     @Column(nullable = false)
     private LocalDateTime createdAt = LocalDateTime.now();
 
@@ -73,6 +77,9 @@ public class MasterRecord {
 
     public String getMetaJson() { return metaJson; }
     public void setMetaJson(String metaJson) { this.metaJson = metaJson; }
+
+    public Double getNominalKg() { return nominalKg; }
+    public void setNominalKg(Double nominalKg) { this.nominalKg = nominalKg; }
 
     public LocalDateTime getCreatedAt() { return createdAt; }
     public void setCreatedAt(LocalDateTime createdAt) { this.createdAt = createdAt; }

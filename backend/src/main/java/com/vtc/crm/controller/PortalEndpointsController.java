@@ -1,11 +1,15 @@
 package com.vtc.crm.controller;
 
 import com.vtc.crm.entity.CounterBill;
+import com.vtc.crm.entity.InwardReceipt;
+import com.vtc.crm.entity.InventoryLot;
 import com.vtc.crm.entity.MaintenanceTicket;
 import com.vtc.crm.entity.MasterRecord;
 import com.vtc.crm.entity.Task;
 import com.vtc.crm.entity.User;
 import com.vtc.crm.repository.CounterBillRepository;
+import com.vtc.crm.repository.InwardReceiptRepository;
+import com.vtc.crm.repository.InventoryLotRepository;
 import com.vtc.crm.repository.MaintenanceTicketRepository;
 import com.vtc.crm.repository.MasterRecordRepository;
 import com.vtc.crm.repository.RoastBatchRepository;
@@ -31,9 +35,9 @@ public class PortalEndpointsController {
     private final UserRepository userRepository;
     private final MaintenanceTicketRepository maintenanceTicketRepository;
     private final TaskRepository taskRepository;
+    private final InwardReceiptRepository inwardReceiptRepository;
+    private final InventoryLotRepository inventoryLotRepository;
 
-    private final List<Map<String, Object>> inwardReceipts = new CopyOnWriteArrayList<>();
-    private final List<Map<String, Object>> inventoryLots = new CopyOnWriteArrayList<>();
     private final List<Map<String, Object>> transfersList = new CopyOnWriteArrayList<>();
     private final List<Map<String, Object>> ordersList = new CopyOnWriteArrayList<>();
     private final List<Map<String, Object>> outsideJobsList = new CopyOnWriteArrayList<>();
@@ -60,13 +64,17 @@ public class PortalEndpointsController {
             MasterRecordRepository masterRepository,
             UserRepository userRepository,
             MaintenanceTicketRepository maintenanceTicketRepository,
-            TaskRepository taskRepository) {
+            TaskRepository taskRepository,
+            InwardReceiptRepository inwardReceiptRepository,
+            InventoryLotRepository inventoryLotRepository) {
         this.roastRepository = roastRepository;
         this.counterRepository = counterRepository;
         this.masterRepository = masterRepository;
         this.userRepository = userRepository;
         this.maintenanceTicketRepository = maintenanceTicketRepository;
         this.taskRepository = taskRepository;
+        this.inwardReceiptRepository = inwardReceiptRepository;
+        this.inventoryLotRepository = inventoryLotRepository;
 
         initDefaults();
     }
@@ -86,46 +94,6 @@ public class PortalEndpointsController {
         p2.put("active", true);
         p2.put("notes", "14 min @ 218°C - Rich chocolate note");
         roastProfiles.add(p2);
-
-        // Default inventory lots from master beans
-        Map<String, Object> lot1 = new HashMap<>();
-        lot1.put("id", 1);
-        lot1.put("code", "LOT-RAW-001");
-        lot1.put("name", "Arabica Plantation A");
-        lot1.put("product", "Arabica Plantation A");
-        lot1.put("stage", "RAW");
-        lot1.put("location", "PROD-01");
-        lot1.put("owner", "VTC");
-        lot1.put("status", "RELEASED");
-        lot1.put("kg", 450.0);
-        lot1.put("available_kg", 450.0);
-        inventoryLots.add(lot1);
-
-        Map<String, Object> lot2 = new HashMap<>();
-        lot2.put("id", 2);
-        lot2.put("code", "LOT-RAW-002");
-        lot2.put("name", "Robusta Cherry AB");
-        lot2.put("product", "Robusta Cherry AB");
-        lot2.put("stage", "RAW");
-        lot2.put("location", "PROD-01");
-        lot2.put("owner", "VTC");
-        lot2.put("status", "RELEASED");
-        lot2.put("kg", 520.0);
-        lot2.put("available_kg", 520.0);
-        inventoryLots.add(lot2);
-
-        Map<String, Object> lot3 = new HashMap<>();
-        lot3.put("id", 3);
-        lot3.put("code", "LOT-RAW-003");
-        lot3.put("name", "Chicory Premium Roasted");
-        lot3.put("product", "Chicory Premium Roasted");
-        lot3.put("stage", "RAW");
-        lot3.put("location", "PROD-01");
-        lot3.put("owner", "VTC");
-        lot3.put("status", "RELEASED");
-        lot3.put("kg", 200.0);
-        lot3.put("available_kg", 200.0);
-        inventoryLots.add(lot3);
 
         // Counter sales items
         Map<String, Object> ci1 = new HashMap<>();
@@ -226,8 +194,13 @@ public class PortalEndpointsController {
             toReviewTasks = taskRepository.countByStatus("SUBMITTED");
         } catch (Exception ignored) {}
         s.put("tasks", activeTasks);
-        s.put("received_bags", inwardReceipts.size());
-        s.put("beans_in_stock", inventoryLots.size());
+        long receivedBags = 0;
+        try { receivedBags = inwardReceiptRepository.sumTotalActiveBags(); } catch (Exception ignored) {}
+        s.put("received_bags", receivedBags);
+
+        long beansInStock = 0;
+        try { beansInStock = inventoryLotRepository.findByStatusNot("REJECTED").size(); } catch (Exception ignored) {}
+        s.put("beans_in_stock", beansInStock);
         s.put("beans_low", 0);
         long roasts = 0;
         try { roasts = roastRepository.count(); } catch (Exception ignored) {}
@@ -611,61 +584,204 @@ public class PortalEndpointsController {
 
     // ---------------------------------------------------- /inward
     @GetMapping("/inward")
-    public List<Map<String, Object>> getInward() {
-        return inwardReceipts;
+    public List<InwardReceipt> getInward() {
+        return inwardReceiptRepository.findAllByOrderByCreatedAtDesc();
     }
 
     @PostMapping("/inward")
     public Map<String, Object> recordInward(
             @RequestBody Map<String, Object> req,
             @AuthenticationPrincipal User currentUser) {
-        Map<String, Object> receipt = new HashMap<>(req);
-        long id = inwardReceipts.size() + 1;
-        receipt.put("id", id);
-        receipt.put("code", "REC-" + String.format("%04d", id));
-        receipt.put("created_at", LocalDateTime.now().format(DateTimeFormatter.ISO_LOCAL_DATE_TIME));
-        receipt.put("created_by", currentUser != null ? currentUser.getFullName() : "Staff");
-        receipt.put("invoice_status", "MATCHED");
-        receipt.put("payment_status", "PAID");
+        String source = req.getOrDefault("source", "AUCTION").toString();
+        String sourceName = req.getOrDefault("source_name", "Supplier").toString();
 
-        double bags = req.containsKey("bags") ? Double.parseDouble(req.get("bags").toString()) : 1.0;
-        double damaged = req.containsKey("damaged") ? Double.parseDouble(req.get("damaged").toString()) : 0.0;
+        Long productId = null;
+        if (req.containsKey("product_id") && req.get("product_id") != null) {
+            try {
+                productId = Long.valueOf(req.get("product_id").toString());
+            } catch (Exception ignored) {}
+        }
+
+        String productName = "Coffee Beans";
         double perBag = 60.0;
-        double totalKg = bags * perBag;
-        double quarantineKg = damaged * perBag;
-        double allocatableKg = totalKg - quarantineKg;
+        if (productId != null) {
+            Optional<MasterRecord> prodOpt = masterRepository.findById(productId);
+            if (prodOpt.isPresent()) {
+                MasterRecord p = prodOpt.get();
+                productName = p.getName();
+                if (p.getNominalKg() != null && p.getNominalKg() > 0) {
+                    perBag = p.getNominalKg();
+                }
+            }
+        }
 
-        receipt.put("nominal_kg", totalKg);
-        receipt.put("allocatable_kg", allocatableKg);
-        receipt.put("quarantine_kg", quarantineKg);
+        int bags = req.containsKey("bags") ? Integer.parseInt(req.get("bags").toString()) : 1;
+        int damaged = req.containsKey("damaged") ? Integer.parseInt(req.get("damaged").toString()) : 0;
+        int partial = req.containsKey("partial") ? Integer.parseInt(req.get("partial").toString()) : 0;
+        Double partialKg = req.containsKey("partial_kg") && req.get("partial_kg") != null 
+                ? Double.parseDouble(req.get("partial_kg").toString()) : null;
 
-        // Generate lot objects so r.lots.map() on frontend succeeds
-        List<Map<String, Object>> createdLots = new ArrayList<>();
-        Map<String, Object> lot = new HashMap<>();
-        long lotId = inventoryLots.size() + 1;
-        lot.put("id", lotId);
-        lot.put("code", "LOT-INW-" + String.format("%04d", lotId));
-        lot.put("name", req.getOrDefault("source_name", "Raw Coffee"));
-        lot.put("product", req.getOrDefault("source_name", "Raw Coffee"));
-        lot.put("stage", "RAW");
-        lot.put("location", "PROD-01");
-        lot.put("owner", "VTC");
-        lot.put("status", "RELEASED");
-        lot.put("kg", allocatableKg);
-        lot.put("available_kg", allocatableKg);
+        int soundBags = Math.max(0, bags - damaged - partial);
+        double soundKg = soundBags * perBag;
+        double damagedKg = damaged * perBag;
+        double pKg = (partialKg != null ? partialKg : 0.0);
+        double totalNominalKg = (soundBags * perBag) + (damaged * perBag) + pKg;
+        double allocatableKg = soundKg + pKg;
+        double quarantineKg = damagedKg;
 
-        createdLots.add(lot);
-        inventoryLots.add(lot);
-        receipt.put("lots", createdLots);
+        long count = inwardReceiptRepository.count() + 1;
+        String code = "IN-" + LocalDate.now().format(DateTimeFormatter.ofPattern("yyMMdd")) + "-" + String.format("%02d", count);
 
-        inwardReceipts.add(receipt);
-        return receipt;
+        InwardReceipt receipt = new InwardReceipt();
+        receipt.setCode(code);
+        receipt.setSource(source);
+        receipt.setSourceName(sourceName);
+        receipt.setProductId(productId);
+        receipt.setProduct(productName);
+        receipt.setBags(bags);
+        receipt.setDamaged(damaged);
+        receipt.setPartial(partial);
+        receipt.setPartialKg(partial > 0 ? pKg : null);
+        receipt.setNominalKg(totalNominalKg);
+        receipt.setAllocatableKg(allocatableKg);
+        receipt.setQuarantineKg(quarantineKg);
+        receipt.setInvoiceStatus("MATCHED");
+        receipt.setPaymentStatus("PAID");
+        receipt.setCreatedBy(currentUser != null ? currentUser.getFullName() : "Admin");
+        receipt.setCreatedAt(LocalDateTime.now());
+
+        InwardReceipt savedReceipt = inwardReceiptRepository.save(receipt);
+
+        List<InventoryLot> createdLots = new ArrayList<>();
+        if (soundBags > 0) {
+            InventoryLot lotSound = new InventoryLot();
+            lotSound.setCode("LOT-" + savedReceipt.getCode() + "-S");
+            lotSound.setReceiptId(savedReceipt.getId());
+            lotSound.setReceiptCode(savedReceipt.getCode());
+            lotSound.setProductId(productId);
+            lotSound.setProduct(productName);
+            lotSound.setName(productName);
+            lotSound.setStage("RAW");
+            lotSound.setLocation("PROD-01");
+            lotSound.setOwner("VTC");
+            lotSound.setStatus("RELEASED");
+            lotSound.setBagKind("SOUND");
+            lotSound.setBags(soundBags);
+            lotSound.setKg(soundKg);
+            lotSound.setAvailableKg(soundKg);
+            lotSound.setNominalKg(perBag);
+            lotSound.setCreatedAt(LocalDateTime.now());
+            createdLots.add(inventoryLotRepository.save(lotSound));
+        }
+
+        if (damaged > 0) {
+            InventoryLot lotDamaged = new InventoryLot();
+            lotDamaged.setCode("LOT-" + savedReceipt.getCode() + "-D");
+            lotDamaged.setReceiptId(savedReceipt.getId());
+            lotDamaged.setReceiptCode(savedReceipt.getCode());
+            lotDamaged.setProductId(productId);
+            lotDamaged.setProduct(productName);
+            lotDamaged.setName(productName);
+            lotDamaged.setStage("RAW");
+            lotDamaged.setLocation("PROD-01");
+            lotDamaged.setOwner("VTC");
+            lotDamaged.setStatus("QUARANTINE");
+            lotDamaged.setBagKind("DAMAGED");
+            lotDamaged.setBags(damaged);
+            lotDamaged.setKg(damagedKg);
+            lotDamaged.setAvailableKg(0.0);
+            lotDamaged.setNominalKg(perBag);
+            lotDamaged.setCreatedAt(LocalDateTime.now());
+            createdLots.add(inventoryLotRepository.save(lotDamaged));
+        }
+
+        if (partial > 0) {
+            InventoryLot lotPartial = new InventoryLot();
+            lotPartial.setCode("LOT-" + savedReceipt.getCode() + "-P");
+            lotPartial.setReceiptId(savedReceipt.getId());
+            lotPartial.setReceiptCode(savedReceipt.getCode());
+            lotPartial.setProductId(productId);
+            lotPartial.setProduct(productName);
+            lotPartial.setName(productName);
+            lotPartial.setStage("RAW");
+            lotPartial.setLocation("PROD-01");
+            lotPartial.setOwner("VTC");
+            lotPartial.setStatus("RELEASED");
+            lotPartial.setBagKind("PARTIAL");
+            lotPartial.setBags(partial);
+            lotPartial.setKg(pKg);
+            lotPartial.setAvailableKg(pKg);
+            lotPartial.setNominalKg(perBag);
+            lotPartial.setCreatedAt(LocalDateTime.now());
+            createdLots.add(inventoryLotRepository.save(lotPartial));
+        }
+
+        Map<String, Object> res = new HashMap<>();
+        res.put("id", savedReceipt.getId());
+        res.put("code", savedReceipt.getCode());
+        res.put("source", savedReceipt.getSource());
+        res.put("source_name", savedReceipt.getSourceName());
+        res.put("product_id", savedReceipt.getProductId());
+        res.put("product", savedReceipt.getProduct());
+        res.put("bags", savedReceipt.getBags());
+        res.put("damaged", savedReceipt.getDamaged());
+        res.put("partial", savedReceipt.getPartial());
+        res.put("partial_kg", savedReceipt.getPartialKg());
+        res.put("nominal_kg", savedReceipt.getNominalKg());
+        res.put("allocatable_kg", savedReceipt.getAllocatableKg());
+        res.put("quarantine_kg", savedReceipt.getQuarantineKg());
+        res.put("invoice_status", savedReceipt.getInvoiceStatus());
+        res.put("payment_status", savedReceipt.getPaymentStatus());
+        res.put("created_by", savedReceipt.getCreatedBy());
+        res.put("created_at", savedReceipt.getCreatedAt().toString());
+        res.put("lots", createdLots);
+        return res;
+    }
+
+    @PostMapping("/inward/{id}/reverse")
+    public ResponseEntity<?> reverseInward(
+            @PathVariable Long id,
+            @RequestBody Map<String, Object> req) {
+        Optional<InwardReceipt> opt = inwardReceiptRepository.findById(id);
+        if (opt.isEmpty()) return ResponseEntity.notFound().build();
+        InwardReceipt r = opt.get();
+        if (r.getReversedAt() != null) {
+            return ResponseEntity.badRequest().body(Collections.singletonMap("error", "ALREADY_REVERSED"));
+        }
+        r.setReversedAt(LocalDateTime.now());
+        r.setReverseReason(req.getOrDefault("reason", "Reversed by user").toString());
+        inwardReceiptRepository.save(r);
+
+        List<InventoryLot> lots = inventoryLotRepository.findByReceiptId(r.getId());
+        for (InventoryLot lot : lots) {
+            lot.setStatus("REJECTED");
+            lot.setAvailableKg(0.0);
+            inventoryLotRepository.save(lot);
+        }
+        return ResponseEntity.ok(r);
     }
 
     // ---------------------------------------------------- /inventory
     @GetMapping("/inventory")
-    public List<Map<String, Object>> getInventory() {
-        return inventoryLots;
+    public List<InventoryLot> getInventory() {
+        return inventoryLotRepository.findAllByOrderByCreatedAtDesc();
+    }
+
+    @PostMapping("/lots/{id}/verify")
+    public ResponseEntity<?> verifyQuarantinedLot(
+            @PathVariable Long id,
+            @RequestBody Map<String, Object> req) {
+        Optional<InventoryLot> opt = inventoryLotRepository.findById(id);
+        if (opt.isEmpty()) return ResponseEntity.notFound().build();
+        InventoryLot lot = opt.get();
+        double verifiedKg = req.containsKey("verified_kg") ? Double.parseDouble(req.get("verified_kg").toString()) : lot.getKg();
+        lot.setStatus("RELEASED");
+        lot.setBagKind("SOUND");
+        lot.setKg(verifiedKg);
+        lot.setAvailableKg(verifiedKg);
+        lot.setUpdatedAt(LocalDateTime.now());
+        inventoryLotRepository.save(lot);
+        return ResponseEntity.ok(lot);
     }
 
     @GetMapping("/transfers")
@@ -811,11 +927,7 @@ public class PortalEndpointsController {
         Map<String, Object> res = new HashMap<>();
         res.put("jobs", packingJobsList);
 
-        List<Map<String, Object>> sources = new ArrayList<>();
-        for (Map<String, Object> lot : inventoryLots) {
-            sources.add(lot);
-        }
-        res.put("sources", sources);
+        res.put("sources", inventoryLotRepository.findAllByOrderByCreatedAtDesc());
         return res;
     }
 
@@ -998,9 +1110,11 @@ public class PortalEndpointsController {
         res.put("roasting", ro);
 
         Map<String, Object> rc = new HashMap<>();
-        rc.put("bags", inwardReceipts.size());
+        long totalActiveBags = 0;
+        try { totalActiveBags = inwardReceiptRepository.sumTotalActiveBags(); } catch (Exception ignored) {}
+        rc.put("bags", totalActiveBags);
         rc.put("damaged", 0);
-        rc.put("kg", inwardReceipts.size() * 60.0);
+        rc.put("kg", totalActiveBags * 60.0);
         res.put("receipts", rc);
 
         Map<String, Object> pk = new HashMap<>();

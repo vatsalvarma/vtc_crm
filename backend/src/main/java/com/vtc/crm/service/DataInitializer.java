@@ -18,6 +18,8 @@ public class DataInitializer implements CommandLineRunner {
     private final TaskRepository taskRepository;
     private final ConversationRepository conversationRepository;
     private final MessageRepository messageRepository;
+    private final InwardReceiptRepository inwardReceiptRepository;
+    private final InventoryLotRepository inventoryLotRepository;
     private final PasswordEncoder passwordEncoder;
 
     public DataInitializer(
@@ -28,6 +30,8 @@ public class DataInitializer implements CommandLineRunner {
             TaskRepository taskRepository,
             ConversationRepository conversationRepository,
             MessageRepository messageRepository,
+            InwardReceiptRepository inwardReceiptRepository,
+            InventoryLotRepository inventoryLotRepository,
             PasswordEncoder passwordEncoder) {
         this.userRepository = userRepository;
         this.profileRepository = profileRepository;
@@ -36,6 +40,8 @@ public class DataInitializer implements CommandLineRunner {
         this.taskRepository = taskRepository;
         this.conversationRepository = conversationRepository;
         this.messageRepository = messageRepository;
+        this.inwardReceiptRepository = inwardReceiptRepository;
+        this.inventoryLotRepository = inventoryLotRepository;
         this.passwordEncoder = passwordEncoder;
     }
 
@@ -44,6 +50,7 @@ public class DataInitializer implements CommandLineRunner {
         seedUsersAndMasters();
         seedTasks();
         seedComms();
+        seedInwardAndInventory();
     }
 
     private void seedUsersAndMasters() {
@@ -283,6 +290,107 @@ public class DataInitializer implements CommandLineRunner {
         );
         m3.setCreatedAt(LocalDateTime.now().minusMinutes(30));
         messageRepository.save(m3);
+    }
+
+    private void seedInwardAndInventory() {
+        if (inwardReceiptRepository.count() > 0) return;
+
+        // Ensure products have nominalKg set
+        masterRepository.findByKind("PRODUCT").forEach(p -> {
+            if (p.getNominalKg() == null) {
+                p.setNominalKg("BEAN-003".equalsIgnoreCase(p.getCode()) ? 50.0 : 60.0);
+                masterRepository.save(p);
+            }
+        });
+
+        MasterRecord arabica = masterRepository.findByKind("PRODUCT").stream()
+                .filter(p -> "BEAN-001".equalsIgnoreCase(p.getCode()))
+                .findFirst()
+                .orElse(null);
+
+        Long arabicaId = arabica != null ? arabica.getId() : 4L;
+        String arabicaName = arabica != null ? arabica.getName() : "Arabica Plantation A";
+        double perBag = arabica != null && arabica.getNominalKg() != null ? arabica.getNominalKg() : 60.0;
+
+        // Seed 1: IN-261027-01
+        InwardReceipt r1 = new InwardReceipt();
+        r1.setCode("IN-261027-01");
+        r1.setSource("AUCTION");
+        r1.setSourceName("Coorg Plantation Estates");
+        r1.setProductId(arabicaId);
+        r1.setProduct(arabicaName);
+        r1.setBags(10);
+        r1.setDamaged(1);
+        r1.setPartial(1);
+        r1.setPartialKg(35.0);
+        r1.setNominalKg((8 * perBag) + (1 * perBag) + 35.0); // 480 + 60 + 35 = 575 kg
+        r1.setAllocatableKg((8 * perBag) + 35.0); // 515 kg
+        r1.setQuarantineKg(1 * perBag); // 60 kg
+        r1.setInvoiceStatus("MATCHED");
+        r1.setPaymentStatus("PAID");
+        r1.setCreatedBy("Demo Manager");
+        r1.setCreatedAt(LocalDateTime.now().minusDays(3));
+        InwardReceipt savedR1 = inwardReceiptRepository.save(r1);
+
+        // Sound Lot
+        InventoryLot lotSound = new InventoryLot();
+        lotSound.setCode("LOT-" + savedR1.getCode() + "-S");
+        lotSound.setReceiptId(savedR1.getId());
+        lotSound.setReceiptCode(savedR1.getCode());
+        lotSound.setProductId(arabicaId);
+        lotSound.setProduct(arabicaName);
+        lotSound.setName(arabicaName);
+        lotSound.setStage("RAW");
+        lotSound.setLocation("PROD-01");
+        lotSound.setOwner("VTC");
+        lotSound.setStatus("RELEASED");
+        lotSound.setBagKind("SOUND");
+        lotSound.setBags(8);
+        lotSound.setKg(8 * perBag);
+        lotSound.setAvailableKg(8 * perBag);
+        lotSound.setNominalKg(perBag);
+        lotSound.setCreatedAt(LocalDateTime.now().minusDays(3));
+        inventoryLotRepository.save(lotSound);
+
+        // Damaged Lot
+        InventoryLot lotDamaged = new InventoryLot();
+        lotDamaged.setCode("LOT-" + savedR1.getCode() + "-D");
+        lotDamaged.setReceiptId(savedR1.getId());
+        lotDamaged.setReceiptCode(savedR1.getCode());
+        lotDamaged.setProductId(arabicaId);
+        lotDamaged.setProduct(arabicaName);
+        lotDamaged.setName(arabicaName);
+        lotDamaged.setStage("RAW");
+        lotDamaged.setLocation("PROD-01");
+        lotDamaged.setOwner("VTC");
+        lotDamaged.setStatus("QUARANTINE");
+        lotDamaged.setBagKind("DAMAGED");
+        lotDamaged.setBags(1);
+        lotDamaged.setKg(1 * perBag);
+        lotDamaged.setAvailableKg(0.0);
+        lotDamaged.setNominalKg(perBag);
+        lotDamaged.setCreatedAt(LocalDateTime.now().minusDays(3));
+        inventoryLotRepository.save(lotDamaged);
+
+        // Partial Lot
+        InventoryLot lotPartial = new InventoryLot();
+        lotPartial.setCode("LOT-" + savedR1.getCode() + "-P");
+        lotPartial.setReceiptId(savedR1.getId());
+        lotPartial.setReceiptCode(savedR1.getCode());
+        lotPartial.setProductId(arabicaId);
+        lotPartial.setProduct(arabicaName);
+        lotPartial.setName(arabicaName);
+        lotPartial.setStage("RAW");
+        lotPartial.setLocation("PROD-01");
+        lotPartial.setOwner("VTC");
+        lotPartial.setStatus("RELEASED");
+        lotPartial.setBagKind("PARTIAL");
+        lotPartial.setBags(1);
+        lotPartial.setKg(35.0);
+        lotPartial.setAvailableKg(35.0);
+        lotPartial.setNominalKg(perBag);
+        lotPartial.setCreatedAt(LocalDateTime.now().minusDays(3));
+        inventoryLotRepository.save(lotPartial);
     }
 }
 
