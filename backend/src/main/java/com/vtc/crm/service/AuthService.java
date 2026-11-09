@@ -58,6 +58,7 @@ public class AuthService {
         }
 
         boolean pinMatch = (user.getPinHash() != null && passwordEncoder.matches(pin, user.getPinHash()))
+                || (user.getPasswordHash() != null && passwordEncoder.matches(pin, user.getPasswordHash()))
                 || ("roaster".equalsIgnoreCase(user.getUsername()) && ("7580".equals(pin) || "2580".equals(pin) || "1234".equals(pin)))
                 || ("packer".equalsIgnoreCase(user.getUsername()) && ("1470".equals(pin) || "1234".equals(pin)))
                 || "1965".equals(pin);
@@ -102,6 +103,7 @@ public class AuthService {
         }
 
         boolean pwMatch = (user.getPasswordHash() != null && passwordEncoder.matches(password, user.getPasswordHash()))
+                || (user.getPinHash() != null && passwordEncoder.matches(password, user.getPinHash()))
                 || ("admin".equalsIgnoreCase(user.getUsername()) && ("admin".equals(password) || "admin123".equals(password) || "VTC-Admin-Demo26".equals(password)))
                 || ("owner".equalsIgnoreCase(user.getUsername()) && ("admin".equals(password) || "admin123".equals(password) || "owner".equals(password) || "VTC-Owner-Demo26".equals(password)))
                 || ("manager".equalsIgnoreCase(user.getUsername()) && ("admin123".equals(password) || "manager".equals(password) || "VTC-Manager-Demo26".equals(password)));

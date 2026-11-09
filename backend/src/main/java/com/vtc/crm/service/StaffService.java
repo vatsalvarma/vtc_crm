@@ -83,13 +83,12 @@ public class StaffService {
         }
 
         User user = new User(username, fullName, role, loginType);
-        if ("pin".equals(loginType)) {
-            String pin = (startingSecret != null && startingSecret.length() >= 4) ? startingSecret : "1234";
-            user.setPinHash(passwordEncoder.encode(pin));
-        } else {
-            String pw = (startingSecret != null && startingSecret.length() >= 6) ? startingSecret : "VTC-Welcome26";
-            user.setPasswordHash(passwordEncoder.encode(pw));
-        }
+        String secret = (startingSecret != null && !startingSecret.trim().isEmpty())
+                ? startingSecret.trim()
+                : ("pin".equals(loginType) ? "1234" : "VTC-Welcome26");
+        String encoded = passwordEncoder.encode(secret);
+        user.setPinHash(encoded);
+        user.setPasswordHash(encoded);
 
         user.setMustChangeSecret(false);
         user.setStatus("ACTIVE");
@@ -202,11 +201,9 @@ public class StaffService {
             throw new RuntimeException("SECRET_REQUIRED");
         }
 
-        if ("pin".equals(user.getLoginType())) {
-            user.setPinHash(passwordEncoder.encode(newSecret));
-        } else {
-            user.setPasswordHash(passwordEncoder.encode(newSecret));
-        }
+        String encoded = passwordEncoder.encode(newSecret.trim());
+        user.setPinHash(encoded);
+        user.setPasswordHash(encoded);
 
         user.setStatus("ACTIVE"); // Unlock on reset
         user.setMustChangeSecret(false);
