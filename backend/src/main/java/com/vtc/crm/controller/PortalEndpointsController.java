@@ -5,6 +5,7 @@ import com.vtc.crm.entity.InwardReceipt;
 import com.vtc.crm.entity.InventoryLot;
 import com.vtc.crm.entity.MaintenanceTicket;
 import com.vtc.crm.entity.MasterRecord;
+import com.vtc.crm.entity.OutsideJob;
 import com.vtc.crm.entity.RoastBatch;
 import com.vtc.crm.entity.Task;
 import com.vtc.crm.entity.User;
@@ -13,6 +14,7 @@ import com.vtc.crm.repository.InwardReceiptRepository;
 import com.vtc.crm.repository.InventoryLotRepository;
 import com.vtc.crm.repository.MaintenanceTicketRepository;
 import com.vtc.crm.repository.MasterRecordRepository;
+import com.vtc.crm.repository.OutsideJobRepository;
 import com.vtc.crm.repository.RoastBatchRepository;
 import com.vtc.crm.repository.TaskRepository;
 import com.vtc.crm.repository.UserRepository;
@@ -38,10 +40,10 @@ public class PortalEndpointsController {
     private final TaskRepository taskRepository;
     private final InwardReceiptRepository inwardReceiptRepository;
     private final InventoryLotRepository inventoryLotRepository;
+    private final OutsideJobRepository outsideJobRepository;
 
     private final List<Map<String, Object>> transfersList = new CopyOnWriteArrayList<>();
     private final List<Map<String, Object>> ordersList = new CopyOnWriteArrayList<>();
-    private final List<Map<String, Object>> outsideJobsList = new CopyOnWriteArrayList<>();
     private final List<Map<String, Object>> packingJobsList = new CopyOnWriteArrayList<>();
     private final List<Map<String, Object>> blendRecipes = new CopyOnWriteArrayList<>();
     private final List<Map<String, Object>> blendJobs = new CopyOnWriteArrayList<>();
@@ -67,7 +69,8 @@ public class PortalEndpointsController {
             MaintenanceTicketRepository maintenanceTicketRepository,
             TaskRepository taskRepository,
             InwardReceiptRepository inwardReceiptRepository,
-            InventoryLotRepository inventoryLotRepository) {
+            InventoryLotRepository inventoryLotRepository,
+            OutsideJobRepository outsideJobRepository) {
         this.roastRepository = roastRepository;
         this.counterRepository = counterRepository;
         this.masterRepository = masterRepository;
@@ -76,6 +79,7 @@ public class PortalEndpointsController {
         this.taskRepository = taskRepository;
         this.inwardReceiptRepository = inwardReceiptRepository;
         this.inventoryLotRepository = inventoryLotRepository;
+        this.outsideJobRepository = outsideJobRepository;
 
         initDefaults();
     }
@@ -927,7 +931,12 @@ public class PortalEndpointsController {
     @GetMapping("/outside/jobs")
     public Map<String, Object> getOutsideJobs() {
         Map<String, Object> res = new HashMap<>();
-        res.put("jobs", outsideJobsList);
+        List<OutsideJob> dbJobs = outsideJobRepository.findAllByOrderByCreatedAtDesc();
+        List<Map<String, Object>> jobs = new ArrayList<>();
+        for (OutsideJob j : dbJobs) {
+            jobs.add(mapOutsideJob(j));
+        }
+        res.put("jobs", jobs);
 
         List<Map<String, Object>> customers = new ArrayList<>();
         List<MasterRecord> custMasters = masterRepository.findByKind("CUSTOMER");
@@ -942,53 +951,151 @@ public class PortalEndpointsController {
     }
 
     @PostMapping("/outside/jobs")
-    public Map<String, Object> createOutsideJob(@RequestBody Map<String, Object> req) {
-        Map<String, Object> job = new HashMap<>(req);
-        long id = outsideJobsList.size() + 1;
-        job.put("id", id);
-        job.put("state", "RECEIVED");
-        job.put("received_kg", req.getOrDefault("received_kg", 50.0));
-        job.put("raw_left_kg", req.getOrDefault("received_kg", 50.0));
-        job.put("roasted_left_kg", 0.0);
-        job.put("returned_kg", 0.0);
-        job.put("payment_status", "PENDING");
-        outsideJobsList.add(job);
-        return job;
+    public Map<String, Object> createOutsideJob(
+            @RequestBody Map<String, Object> req,
+            @AuthenticationPrincipal User currentUser) {
+        Long customerId = req.containsKey("customer_id") && req.get("customer_id") != null
+                ? Long.parseLong(req.get("customer_id").toString()) : 1L;
+        String customerName = "Sample Customer";
+        Optional<MasterRecord> custOpt = masterRepository.findById(customerId);
+        if (custOpt.isPresent()) {
+            customerName = custOpt.get().getName();
+        } else {
+            List<MasterRecord> list = masterRepository.findByKind("CUSTOMER");
+            if (!list.isEmpty()) {
+                customerName = list.get(0).getName();
+            }
+        }
+
+        double receivedKg = req.containsKey("received_kg") && req.get("received_kg") != null
+                ? Double.parseDouble(req.get("received_kg").toString()) : 50.0;
+        String beanType = req.containsKey("bean_type") && req.get("bean_type") != null
+                ? req.get("bean_type").toString() : "Robusta cherry";
+        String chargeBasis = req.containsKey("charge_basis") && req.get("charge_basis") != null
+                ? req.get("charge_basis").toString() : "INPUT_KG";
+        long ratePaise = req.containsKey("rate_paise") && req.get("rate_paise") != null
+                ? Long.parseLong(req.get("rate_paise").toString()) : 2500L;
+
+        Long chargePaise = null;
+        if ("BATCH".equalsIgnoreCase(chargeBasis)) {
+            chargePaise = ratePaise;
+        } else if ("INPUT_KG".equalsIgnoreCase(chargeBasis)) {
+            chargePaise = Math.round(receivedKg * ratePaise);
+        }
+
+        OutsideJob job = new OutsideJob();
+        job.setCustomerId(customerId);
+        job.setCustomer(customerName);
+        job.setBeanType(beanType);
+        job.setReceivedKg(receivedKg);
+        job.setRawLeftKg(receivedKg);
+        job.setRoastedLeftKg(0.0);
+        job.setReturnedKg(0.0);
+        job.setChargeBasis(chargeBasis);
+        job.setRatePaise(ratePaise);
+        job.setChargePaise(chargePaise);
+        job.setPaymentStatus("PENDING");
+        job.setState("RECEIVED");
+        job.setReceivedByName(currentUser != null ? currentUser.getFullName() : "Staff");
+        job.setCreatedAt(LocalDateTime.now());
+        job.setUpdatedAt(LocalDateTime.now());
+
+        OutsideJob saved = outsideJobRepository.save(job);
+        return mapOutsideJob(saved);
     }
 
     @PostMapping("/outside/jobs/{id}/roast")
-    public Map<String, Object> roastOutsideJob(@PathVariable long id, @RequestBody Map<String, Object> req) {
-        for (Map<String, Object> j : outsideJobsList) {
-            if (Objects.equals(j.get("id"), id)) {
-                j.put("state", "ROASTED");
-                j.put("roasted_left_kg", req.getOrDefault("output_kg", 42.0));
-                j.put("raw_left_kg", 0.0);
-                return j;
-            }
+    public ResponseEntity<?> roastOutsideJob(@PathVariable long id, @RequestBody Map<String, Object> req) {
+        Optional<OutsideJob> opt = outsideJobRepository.findById(id);
+        if (opt.isEmpty()) return ResponseEntity.notFound().build();
+        OutsideJob job = opt.get();
+
+        double inputKg = req.containsKey("input_kg") && req.get("input_kg") != null
+                ? Double.parseDouble(req.get("input_kg").toString()) : job.getRawLeftKg();
+        double outputKg = req.containsKey("output_kg") && req.get("output_kg") != null
+                ? Double.parseDouble(req.get("output_kg").toString()) : inputKg * 0.84;
+
+        job.setInputKg(inputKg);
+        job.setOutputKg(outputKg);
+        job.setRawLeftKg(Math.max(0.0, job.getRawLeftKg() - inputKg));
+        job.setRoastedLeftKg(job.getRoastedLeftKg() + outputKg);
+        job.setState("ROASTED");
+        job.setRoastedLotId(job.getId());
+
+        if ("INPUT_KG".equalsIgnoreCase(job.getChargeBasis())) {
+            job.setChargePaise(Math.round(inputKg * job.getRatePaise()));
+        } else if ("OUTPUT_KG".equalsIgnoreCase(job.getChargeBasis())) {
+            job.setChargePaise(Math.round(outputKg * job.getRatePaise()));
+        } else if ("BATCH".equalsIgnoreCase(job.getChargeBasis())) {
+            job.setChargePaise(job.getRatePaise());
         }
-        return req;
+
+        job.setUpdatedAt(LocalDateTime.now());
+        OutsideJob saved = outsideJobRepository.save(job);
+        return ResponseEntity.ok(mapOutsideJob(saved));
     }
 
     @PostMapping("/outside/jobs/{id}/return")
-    public Map<String, Object> returnOutsideJob(@PathVariable long id, @RequestBody Map<String, Object> req) {
-        for (Map<String, Object> j : outsideJobsList) {
-            if (Objects.equals(j.get("id"), id)) {
-                j.put("state", "RETURNED");
-                return j;
-            }
+    public ResponseEntity<?> returnOutsideJob(@PathVariable long id, @RequestBody Map<String, Object> req) {
+        Optional<OutsideJob> opt = outsideJobRepository.findById(id);
+        if (opt.isEmpty()) return ResponseEntity.notFound().build();
+        OutsideJob job = opt.get();
+
+        String what = req.containsKey("what") && req.get("what") != null ? req.get("what").toString() : "roasted";
+        double kg = req.containsKey("kg") && req.get("kg") != null ? Double.parseDouble(req.get("kg").toString()) : 0.0;
+        String note = req.containsKey("note") && req.get("note") != null ? req.get("note").toString() : "";
+
+        job.setReturnedKg(job.getReturnedKg() + kg);
+        if ("roasted".equalsIgnoreCase(what)) {
+            job.setRoastedLeftKg(Math.max(0.0, job.getRoastedLeftKg() - kg));
+        } else {
+            job.setRawLeftKg(Math.max(0.0, job.getRawLeftKg() - kg));
         }
-        return req;
+
+        if ((job.getRawLeftKg() + job.getRoastedLeftKg()) <= 0.001) {
+            job.setState("RETURNED");
+        }
+
+        if (note != null && !note.isBlank()) {
+            String prev = job.getReturnNote() != null ? job.getReturnNote() + " | " : "";
+            job.setReturnNote(prev + note);
+        }
+        job.setUpdatedAt(LocalDateTime.now());
+        OutsideJob saved = outsideJobRepository.save(job);
+        return ResponseEntity.ok(mapOutsideJob(saved));
     }
 
     @PostMapping("/outside/jobs/{id}/payment")
-    public Map<String, Object> payOutsideJob(@PathVariable long id, @RequestBody Map<String, Object> req) {
-        for (Map<String, Object> j : outsideJobsList) {
-            if (Objects.equals(j.get("id"), id)) {
-                j.put("payment_status", "PAID");
-                return j;
-            }
-        }
-        return req;
+    public ResponseEntity<?> payOutsideJob(@PathVariable long id, @RequestBody Map<String, Object> req) {
+        Optional<OutsideJob> opt = outsideJobRepository.findById(id);
+        if (opt.isEmpty()) return ResponseEntity.notFound().build();
+        OutsideJob job = opt.get();
+        job.setPaymentStatus("PAID");
+        job.setUpdatedAt(LocalDateTime.now());
+        OutsideJob saved = outsideJobRepository.save(job);
+        return ResponseEntity.ok(mapOutsideJob(saved));
+    }
+
+    private Map<String, Object> mapOutsideJob(OutsideJob j) {
+        Map<String, Object> m = new HashMap<>();
+        m.put("id", j.getId());
+        m.put("customer_id", j.getCustomerId());
+        m.put("customer", j.getCustomer());
+        m.put("bean_type", j.getBeanType());
+        m.put("received_kg", j.getReceivedKg() != null ? j.getReceivedKg() : 0.0);
+        m.put("input_kg", j.getInputKg());
+        m.put("output_kg", j.getOutputKg());
+        m.put("returned_kg", j.getReturnedKg() != null ? j.getReturnedKg() : 0.0);
+        m.put("raw_left_kg", j.getRawLeftKg() != null ? j.getRawLeftKg() : 0.0);
+        m.put("roasted_left_kg", j.getRoastedLeftKg() != null ? j.getRoastedLeftKg() : 0.0);
+        m.put("charge_basis", j.getChargeBasis() != null ? j.getChargeBasis() : "INPUT_KG");
+        m.put("rate_paise", j.getRatePaise() != null ? j.getRatePaise() : 0L);
+        m.put("charge_paise", j.getChargePaise());
+        m.put("payment_status", j.getPaymentStatus() != null ? j.getPaymentStatus() : "PENDING");
+        m.put("state", j.getState() != null ? j.getState() : "RECEIVED");
+        m.put("roasted_lot_id", j.getRoastedLotId());
+        m.put("created_at", j.getCreatedAt() != null ? j.getCreatedAt().toString() : LocalDateTime.now().toString());
+        return m;
     }
 
     // ---------------------------------------------------- /packing
@@ -1226,8 +1333,13 @@ public class PortalEndpointsController {
         res.put("invoiced", invoiced);
 
         Map<String, Object> outside = new HashMap<>();
-        outside.put("charge_paise", 0L);
-        outside.put("jobs", outsideJobsList.size());
+        long outsideCharges = 0L;
+        List<OutsideJob> allOutsideJobs = outsideJobRepository.findAll();
+        for (OutsideJob j : allOutsideJobs) {
+            if (j.getChargePaise() != null) outsideCharges += j.getChargePaise();
+        }
+        outside.put("charge_paise", outsideCharges);
+        outside.put("jobs", allOutsideJobs.size());
         res.put("outside", outside);
 
         res.put("margin_note", "Gross margins will calculate once all batch costs are recorded.");

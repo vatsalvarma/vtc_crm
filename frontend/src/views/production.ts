@@ -203,7 +203,7 @@ export async function productionClick(el) {
     if (!customers.length) return toast("Add the customer in Master Data first.", true), true;
     const f = await dialog({ title: "Receive customer's coffee", submit: "Receive",
       body: `${select("customer_id", "Customer", customers.map((c) => [c.id, c.name]))}${field("bean_type", "Type of beans", "text", 'required minlength="2" maxlength="80" list="beanTypes" placeholder="e.g. Robusta cherry"')}
-        <datalist id="beanTypes">${[...new Set(S.data["/outside/jobs"].jobs.map((j) => j.bean_type).filter(Boolean))].map((b) => `<option value="${h(b)}">`).join("")}</datalist>
+        <datalist id="beanTypes">${[...new Set((Array.isArray(d.jobs) ? d.jobs : []).map((j: any) => j.bean_type).filter(Boolean))].map((b) => `<option value="${h(b)}">`).join("")}</datalist>
         ${field("received_kg", "Kg received (weighed)", "number", 'required min="0.001" step="0.001"')}
         <div class="form-grid">${select("charge_basis", "Charge by", [["INPUT_KG", "Per kg roasted (input)"], ["OUTPUT_KG", "Per kg returned (output)"], ["BATCH", "Per batch"]])}${field("rate", "Agreed rate (₹)", "number", 'required min="0.01" step="0.01"')}</div>` });
     if (!f) return true;

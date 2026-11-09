@@ -21,6 +21,7 @@ public class DataInitializer implements CommandLineRunner {
     private final InwardReceiptRepository inwardReceiptRepository;
     private final InventoryLotRepository inventoryLotRepository;
     private final RoastBatchRepository roastRepository;
+    private final OutsideJobRepository outsideJobRepository;
     private final PasswordEncoder passwordEncoder;
 
     public DataInitializer(
@@ -34,6 +35,7 @@ public class DataInitializer implements CommandLineRunner {
             InwardReceiptRepository inwardReceiptRepository,
             InventoryLotRepository inventoryLotRepository,
             RoastBatchRepository roastRepository,
+            OutsideJobRepository outsideJobRepository,
             PasswordEncoder passwordEncoder) {
         this.userRepository = userRepository;
         this.profileRepository = profileRepository;
@@ -45,6 +47,7 @@ public class DataInitializer implements CommandLineRunner {
         this.inwardReceiptRepository = inwardReceiptRepository;
         this.inventoryLotRepository = inventoryLotRepository;
         this.roastRepository = roastRepository;
+        this.outsideJobRepository = outsideJobRepository;
         this.passwordEncoder = passwordEncoder;
     }
 
@@ -55,6 +58,7 @@ public class DataInitializer implements CommandLineRunner {
         seedComms();
         seedInwardAndInventory();
         seedRoastBatches();
+        seedOutsideJobs();
     }
 
     private void seedUsersAndMasters() {
@@ -470,6 +474,33 @@ public class DataInitializer implements CommandLineRunner {
             b3.setCreatedAt(LocalDateTime.now().minusDays(2));
             roastRepository.save(b3);
         }
+    }
+
+    private void seedOutsideJobs() {
+        if (outsideJobRepository.count() > 0) return;
+
+        MasterRecord cust = masterRepository.findByKind("CUSTOMER").stream()
+                .filter(c -> "Sample Café, Banjara Hills".equalsIgnoreCase(c.getName()))
+                .findFirst()
+                .orElse(null);
+
+        OutsideJob job = new OutsideJob();
+        job.setCustomerId(cust != null ? cust.getId() : 1L);
+        job.setCustomer(cust != null ? cust.getName() : "Sample Café, Banjara Hills");
+        job.setBeanType("Robusta cherry");
+        job.setReceivedKg(50.0);
+        job.setRawLeftKg(50.0);
+        job.setRoastedLeftKg(0.0);
+        job.setReturnedKg(0.0);
+        job.setChargeBasis("INPUT_KG");
+        job.setRatePaise(2500L); // ₹25/kg
+        job.setChargePaise(125000L); // ₹1,250.00
+        job.setPaymentStatus("PENDING");
+        job.setState("RECEIVED");
+        job.setReceivedByName("Owner (Demo)");
+        job.setCreatedAt(LocalDateTime.now().minusHours(4));
+        job.setUpdatedAt(LocalDateTime.now().minusHours(4));
+        outsideJobRepository.save(job);
     }
 }
 
