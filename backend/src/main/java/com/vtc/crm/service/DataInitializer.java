@@ -13,6 +13,7 @@ public class DataInitializer implements CommandLineRunner {
     private final UserProfileRepository profileRepository;
     private final UserDocumentRepository docRepository;
     private final MasterRecordRepository masterRepository;
+    private final TaskRepository taskRepository;
     private final PasswordEncoder passwordEncoder;
 
     public DataInitializer(
@@ -20,16 +21,23 @@ public class DataInitializer implements CommandLineRunner {
             UserProfileRepository profileRepository,
             UserDocumentRepository docRepository,
             MasterRecordRepository masterRepository,
+            TaskRepository taskRepository,
             PasswordEncoder passwordEncoder) {
         this.userRepository = userRepository;
         this.profileRepository = profileRepository;
         this.docRepository = docRepository;
         this.masterRepository = masterRepository;
+        this.taskRepository = taskRepository;
         this.passwordEncoder = passwordEncoder;
     }
 
     @Override
     public void run(String... args) {
+        seedUsersAndMasters();
+        seedTasks();
+    }
+
+    private void seedUsersAndMasters() {
         if (userRepository.count() > 0) return;
 
         // 1. Owner
@@ -112,6 +120,98 @@ public class DataInitializer implements CommandLineRunner {
         masterRepository.save(new MasterRecord("PRODUCT", "BEAN-002", "Robusta Cherry AB", "ACTIVE"));
         masterRepository.save(new MasterRecord("PRODUCT", "BEAN-003", "Chicory Premium Roasted", "ACTIVE"));
         masterRepository.save(new MasterRecord("PRODUCT", "BEAN-004", "Peaberry Special Reserve", "ACTIVE"));
+    }
+
+    private void seedTasks() {
+        if (taskRepository.count() > 0) return;
+
+        User owner = userRepository.findByUsername("owner").orElse(null);
+        User roaster = userRepository.findByUsername("roaster").orElse(null);
+        User packer = userRepository.findByUsername("packer").orElse(null);
+
+        String ownerName = owner != null ? owner.getFullName() : "Owner";
+        Long ownerId = owner != null ? owner.getId() : 1L;
+
+        // 1. Pack 12 packs – ticket #1 Filter blend
+        Task t1 = new Task();
+        t1.setTitle("Pack 12 packs – ticket #1 Filter blend");
+        t1.setKind("PACK");
+        t1.setKindLabel("Packing");
+        t1.setUnit("packs");
+        t1.setTarget(12.0);
+        t1.setProgress(12.0);
+        t1.setStatus("SUBMITTED");
+        t1.setSubmitNote("12 packs done, 1 rejected");
+        t1.setDue("2026-11-10");
+        t1.setAssignedBy(ownerName);
+        t1.setAssignedById(ownerId);
+        if (packer != null) {
+            t1.setAssignedTo(packer.getId());
+            t1.setAssignee(packer.getFullName());
+        } else {
+            t1.setAssignee("Prakash (Packer)");
+        }
+        taskRepository.save(t1);
+
+        // 2. Roast 3 batches
+        Task t2 = new Task();
+        t2.setTitle("Roast 3 batches");
+        t2.setKind("ROAST");
+        t2.setKindLabel("Roasting");
+        t2.setUnit("batches");
+        t2.setTarget(3.0);
+        t2.setProgress(3.0);
+        t2.setStatus("IN_PROGRESS");
+        t2.setDue("2026-11-10");
+        t2.setAssignedBy(ownerName);
+        t2.setAssignedById(ownerId);
+        if (roaster != null) {
+            t2.setAssignedTo(roaster.getId());
+            t2.setAssignee(roaster.getFullName());
+        } else {
+            t2.setAssignee("Ramesh (Roaster)");
+        }
+        taskRepository.save(t2);
+
+        // 3. Handle 10 counter bills
+        Task t3 = new Task();
+        t3.setTitle("Handle 10 counter bills");
+        t3.setKind("COUNTER");
+        t3.setKindLabel("Counter Sales");
+        t3.setUnit("bills");
+        t3.setTarget(10.0);
+        t3.setProgress(0.0);
+        t3.setStatus("OPEN");
+        t3.setDue("2026-11-10");
+        t3.setAssignedBy(ownerName);
+        t3.setAssignedById(ownerId);
+        if (roaster != null) {
+            t3.setAssignedTo(roaster.getId());
+            t3.setAssignee(roaster.getFullName());
+        } else {
+            t3.setAssignee("Ramesh (Roaster)");
+        }
+        taskRepository.save(t3);
+
+        // 4. Clean roaster chaff collector
+        Task t4 = new Task();
+        t4.setTitle("Clean roaster chaff collector");
+        t4.setKind("GENERAL");
+        t4.setKindLabel("General");
+        t4.setUnit("");
+        t4.setTarget(null);
+        t4.setProgress(0.0);
+        t4.setStatus("OPEN");
+        t4.setDue("2026-11-10");
+        t4.setAssignedBy(ownerName);
+        t4.setAssignedById(ownerId);
+        if (roaster != null) {
+            t4.setAssignedTo(roaster.getId());
+            t4.setAssignee(roaster.getFullName());
+        } else {
+            t4.setAssignee("Ramesh (Roaster)");
+        }
+        taskRepository.save(t4);
     }
 }
 

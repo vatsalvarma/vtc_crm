@@ -3,11 +3,13 @@ package com.vtc.crm.controller;
 import com.vtc.crm.entity.CounterBill;
 import com.vtc.crm.entity.MaintenanceTicket;
 import com.vtc.crm.entity.MasterRecord;
+import com.vtc.crm.entity.Task;
 import com.vtc.crm.entity.User;
 import com.vtc.crm.repository.CounterBillRepository;
 import com.vtc.crm.repository.MaintenanceTicketRepository;
 import com.vtc.crm.repository.MasterRecordRepository;
 import com.vtc.crm.repository.RoastBatchRepository;
+import com.vtc.crm.repository.TaskRepository;
 import com.vtc.crm.repository.UserRepository;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
@@ -28,8 +30,8 @@ public class PortalEndpointsController {
     private final MasterRecordRepository masterRepository;
     private final UserRepository userRepository;
     private final MaintenanceTicketRepository maintenanceTicketRepository;
+    private final TaskRepository taskRepository;
 
-    private final List<Map<String, Object>> tasksList = new CopyOnWriteArrayList<>();
     private final List<Map<String, Object>> inwardReceipts = new CopyOnWriteArrayList<>();
     private final List<Map<String, Object>> inventoryLots = new CopyOnWriteArrayList<>();
     private final List<Map<String, Object>> transfersList = new CopyOnWriteArrayList<>();
@@ -57,12 +59,14 @@ public class PortalEndpointsController {
             CounterBillRepository counterRepository,
             MasterRecordRepository masterRepository,
             UserRepository userRepository,
-            MaintenanceTicketRepository maintenanceTicketRepository) {
+            MaintenanceTicketRepository maintenanceTicketRepository,
+            TaskRepository taskRepository) {
         this.roastRepository = roastRepository;
         this.counterRepository = counterRepository;
         this.masterRepository = masterRepository;
         this.userRepository = userRepository;
         this.maintenanceTicketRepository = maintenanceTicketRepository;
+        this.taskRepository = taskRepository;
 
         initDefaults();
     }
@@ -215,7 +219,13 @@ public class PortalEndpointsController {
     @GetMapping("/summary")
     public Map<String, Object> getSummary() {
         Map<String, Object> s = new HashMap<>();
-        s.put("tasks", tasksList.size());
+        long activeTasks = 0;
+        long toReviewTasks = 0;
+        try {
+            activeTasks = taskRepository.countByStatusNot("DONE");
+            toReviewTasks = taskRepository.countByStatus("SUBMITTED");
+        } catch (Exception ignored) {}
+        s.put("tasks", activeTasks);
         s.put("received_bags", inwardReceipts.size());
         s.put("beans_in_stock", inventoryLots.size());
         s.put("beans_low", 0);
@@ -223,8 +233,8 @@ public class PortalEndpointsController {
         try { roasts = roastRepository.count(); } catch (Exception ignored) {}
         s.put("roasts", roasts);
         s.put("packing", packingJobsList.size());
-        s.put("team_tasks", tasksList.size());
-        s.put("to_review", 0);
+        s.put("team_tasks", activeTasks);
+        s.put("to_review", toReviewTasks);
         s.put("held", 0);
         s.put("orders", ordersList.size());
         long bills = 0;
@@ -235,8 +245,13 @@ public class PortalEndpointsController {
 
     // ---------------------------------------------------- /tasks & /tasks/options
     @GetMapping("/tasks")
-    public List<Map<String, Object>> getTasks() {
-        return tasksList;
+    public List<Map<String, Object>> getTasks(@AuthenticationPrincipal User currentUser) {
+        List<Task> tasks = taskRepository.findAllByOrderByCreatedAtDesc();
+        List<Map<String, Object>> res = new ArrayList<>();
+        for (Task t : tasks) {
+            res.add(formatTask(t, currentUser));
+        }
+        return res;
     }
 
     @GetMapping("/tasks/options")
@@ -283,40 +298,208 @@ public class PortalEndpointsController {
         return k;
     }
 
+    private String getKindLabel(String kind) {
+        if (kind == null) return "General";
+        switch (kind.toUpperCase()) {
+            case "ROAST": return "Roasting";
+            case "PACK": return "Packing";
+            case "QC": return "Quality Control";
+            case "OUTSIDE": return "Outside Roasting";
+            case "COUNTER": return "Counter Sales";
+            case "DISPATCH": return "Dispatch";
+            case "INWARD": return "Stock Inward";
+            case "BLEND": return "Blending";
+            case "COUNT": return "Cycle Count";
+            default: return "General";
+        }
+    }
+
+    private String getKindUnit(String kind) {
+        if (kind == null) return "";
+        switch (kind.toUpperCase()) {
+            case "ROAST": return "batches";
+            case "PACK": return "packs";
+            case "QC": return "lots";
+            case "OUTSIDE": return "jobs";
+            case "COUNTER": return "bills";
+            case "DISPATCH": return "orders";
+            case "INWARD": return "bags";
+            case "BLEND": return "kg";
+            case "COUNT": return "lots";
+            default: return "";
+        }
+    }
+
+    private Map<String, Object> formatTask(Task t, User currentUser) {
+        Map<String, Object> map = new HashMap<>();
+        map.put("id", t.getId());
+        map.put("title", t.getTitle());
+        map.put("kind", t.getKind());
+        map.put("kind_label", t.getKindLabel() != null ? t.getKindLabel() : getKindLabel(t.getKind()));
+        map.put("unit", t.getUnit() != null ? t.getUnit() : getKindUnit(t.getKind()));
+        map.put("status", t.getStatus());
+        map.put("progress", t.getProgress() != null ? t.getProgress() : 0.0);
+        map.put("target", t.getTarget());
+        map.put("due", t.getDue());
+        map.put("assigned_to", t.getAssignedTo());
+        map.put("assignee", t.getAssignee());
+        map.put("assigned_by", t.getAssignedBy());
+        map.put("assigned_by_id", t.getAssignedById());
+        map.put("submit_note", t.getSubmitNote());
+        map.put("review_note", t.getReviewNote());
+        map.put("reviewed_by_id", t.getReviewedById());
+        map.put("reviewed_by_name", t.getReviewedByName());
+        map.put("ref_id", t.getRefId());
+        map.put("created_at", t.getCreatedAt() != null ? t.getCreatedAt().toString() : null);
+
+        boolean isAssigner = currentUser != null && currentUser.getId() != null && Objects.equals(currentUser.getId(), t.getAssignedById());
+        boolean isBoss = currentUser != null && ("Admin".equalsIgnoreCase(currentUser.getRole()) || "Manager".equalsIgnoreCase(currentUser.getRole()) || "owner".equalsIgnoreCase(currentUser.getUsername()));
+        boolean mayReview = "SUBMITTED".equalsIgnoreCase(t.getStatus()) && (isAssigner || isBoss || currentUser == null);
+        map.put("may_review", mayReview);
+
+        boolean isMine = currentUser != null && Objects.equals(currentUser.getId(), t.getAssignedTo());
+        map.put("mine", isMine);
+
+        return map;
+    }
+
     @PostMapping("/tasks")
     public Map<String, Object> createTask(
             @RequestBody Map<String, Object> req,
             @AuthenticationPrincipal User currentUser) {
-        Map<String, Object> task = new HashMap<>(req);
-        int id = tasksList.size() + 1;
-        task.put("id", id);
-        task.put("status", "OPEN");
-        task.put("progress", 0);
-        task.put("kind_label", req.getOrDefault("kind", "GENERAL"));
-        task.put("assigned_by", currentUser != null ? currentUser.getFullName() : "Admin");
-        task.put("created_at", LocalDateTime.now().format(DateTimeFormatter.ISO_LOCAL_DATE_TIME));
+        Task task = new Task();
+        String kind = req.get("kind") != null ? req.get("kind").toString() : "GENERAL";
+        task.setKind(kind);
+        task.setKindLabel(getKindLabel(kind));
+        task.setUnit(getKindUnit(kind));
 
-        if (req.containsKey("assigned_to") && req.get("assigned_to") != null) {
-            Long uid = Long.valueOf(req.get("assigned_to").toString());
-            userRepository.findById(uid).ifPresent(u -> task.put("assignee", u.getFullName()));
+        if (req.get("target") != null && !req.get("target").toString().isEmpty()) {
+            try {
+                task.setTarget(Double.parseDouble(req.get("target").toString()));
+            } catch (Exception ignored) {}
         }
-        if (!task.containsKey("title") || task.get("title") == null || task.get("title").toString().isEmpty()) {
-            task.put("title", task.get("kind_label") + " task #" + id);
+        task.setProgress(0.0);
+        task.setStatus("OPEN");
+
+        if (req.get("due") != null) {
+            task.setDue(req.get("due").toString());
+        }
+        if (req.get("ref_id") != null && !req.get("ref_id").toString().isEmpty()) {
+            try {
+                task.setRefId(Long.parseLong(req.get("ref_id").toString()));
+            } catch (Exception ignored) {}
         }
 
-        tasksList.add(task);
-        return task;
+        if (req.get("assigned_to") != null && !req.get("assigned_to").toString().isEmpty()) {
+            try {
+                Long uid = Long.parseLong(req.get("assigned_to").toString());
+                task.setAssignedTo(uid);
+                userRepository.findById(uid).ifPresent(u -> task.setAssignee(u.getFullName()));
+            } catch (Exception ignored) {}
+        }
+
+        if (currentUser != null) {
+            task.setAssignedById(currentUser.getId());
+            task.setAssignedBy(currentUser.getFullName());
+        } else {
+            task.setAssignedBy("Owner");
+        }
+
+        String title = req.get("title") != null ? req.get("title").toString().trim() : "";
+        if (title.isEmpty()) {
+            if ("ROAST".equalsIgnoreCase(kind)) {
+                title = "Roast " + (task.getTarget() != null ? (task.getTarget().intValue() + " batches") : "batches");
+            } else if ("PACK".equalsIgnoreCase(kind)) {
+                title = "Pack " + (task.getTarget() != null ? (task.getTarget().intValue() + " packs") : "packs");
+            } else if ("COUNTER".equalsIgnoreCase(kind)) {
+                title = "Handle " + (task.getTarget() != null ? (task.getTarget().intValue() + " counter bills") : "counter bills");
+            } else if ("DISPATCH".equalsIgnoreCase(kind)) {
+                title = "Dispatch " + (task.getTarget() != null ? (task.getTarget().intValue() + " orders") : "orders");
+            } else if ("INWARD".equalsIgnoreCase(kind)) {
+                title = "Inward " + (task.getTarget() != null ? (task.getTarget().intValue() + " bags") : "bags");
+            } else if ("BLEND".equalsIgnoreCase(kind)) {
+                title = "Blend " + (task.getTarget() != null ? (task.getTarget().intValue() + " kg") : "batches");
+            } else if ("QC".equalsIgnoreCase(kind)) {
+                title = "QC check " + (task.getTarget() != null ? (task.getTarget().intValue() + " lots") : "lots");
+            } else if ("COUNT".equalsIgnoreCase(kind)) {
+                title = "Cycle count " + (task.getTarget() != null ? (task.getTarget().intValue() + " lots") : "lots");
+            } else {
+                title = task.getKindLabel() + " work";
+            }
+        }
+        task.setTitle(title);
+
+        Task saved = taskRepository.save(task);
+        return formatTask(saved, currentUser);
+    }
+
+    @PutMapping("/tasks/{id}")
+    public ResponseEntity<?> updateTask(
+            @PathVariable Long id,
+            @RequestBody Map<String, Object> req,
+            @AuthenticationPrincipal User currentUser) {
+        Optional<Task> opt = taskRepository.findById(id);
+        if (!opt.isPresent()) {
+            return ResponseEntity.notFound().build();
+        }
+        Task task = opt.get();
+        if (req.containsKey("progress") && req.get("progress") != null) {
+            try {
+                task.setProgress(Double.parseDouble(req.get("progress").toString()));
+            } catch (Exception ignored) {}
+        }
+        if (req.containsKey("status") && req.get("status") != null) {
+            String newStatus = req.get("status").toString();
+            task.setStatus(newStatus);
+        }
+        task.setUpdatedAt(LocalDateTime.now());
+        Task saved = taskRepository.save(task);
+        return ResponseEntity.ok(formatTask(saved, currentUser));
     }
 
     @PostMapping("/tasks/{id}/submit")
-    public Map<String, Object> submitTask(@PathVariable int id) {
-        for (Map<String, Object> t : tasksList) {
-            if (Objects.equals(t.get("id"), id)) {
-                t.put("status", "SUBMITTED");
-                return t;
-            }
+    public ResponseEntity<?> submitTask(
+            @PathVariable Long id,
+            @RequestBody(required = false) Map<String, Object> req,
+            @AuthenticationPrincipal User currentUser) {
+        Optional<Task> opt = taskRepository.findById(id);
+        if (!opt.isPresent()) {
+            return ResponseEntity.notFound().build();
         }
-        return Collections.singletonMap("status", "SUBMITTED");
+        Task task = opt.get();
+        task.setStatus("SUBMITTED");
+        if (req != null && req.containsKey("note") && req.get("note") != null) {
+            task.setSubmitNote(req.get("note").toString());
+        }
+        task.setUpdatedAt(LocalDateTime.now());
+        Task saved = taskRepository.save(task);
+        return ResponseEntity.ok(formatTask(saved, currentUser));
+    }
+
+    @PostMapping("/tasks/{id}/review")
+    public ResponseEntity<?> reviewTask(
+            @PathVariable Long id,
+            @RequestBody Map<String, Object> req,
+            @AuthenticationPrincipal User currentUser) {
+        Optional<Task> opt = taskRepository.findById(id);
+        if (!opt.isPresent()) {
+            return ResponseEntity.notFound().build();
+        }
+        Task task = opt.get();
+        boolean approve = Boolean.TRUE.equals(req.get("approve")) || "true".equalsIgnoreCase(String.valueOf(req.get("approve")));
+        task.setStatus(approve ? "DONE" : "IN_PROGRESS");
+        if (req.containsKey("note") && req.get("note") != null) {
+            task.setReviewNote(req.get("note").toString());
+        }
+        if (currentUser != null) {
+            task.setReviewedById(currentUser.getId());
+            task.setReviewedByName(currentUser.getFullName());
+        } else {
+            task.setReviewedByName("Owner");
+        }
+        task.setUpdatedAt(LocalDateTime.now());
+        Task saved = taskRepository.save(task);
+        return ResponseEntity.ok(formatTask(saved, currentUser));
     }
 
     // ---------------------------------------------------- /maintenance
