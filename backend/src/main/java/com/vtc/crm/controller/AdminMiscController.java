@@ -2,6 +2,7 @@ package com.vtc.crm.controller;
 
 import com.vtc.crm.entity.AuditLog;
 import com.vtc.crm.repository.AuditLogRepository;
+import com.vtc.crm.repository.PackingTicketRepository;
 import com.vtc.crm.repository.RoastBatchRepository;
 import org.springframework.web.bind.annotation.*;
 
@@ -13,10 +14,15 @@ public class AdminMiscController {
 
     private final AuditLogRepository auditRepository;
     private final RoastBatchRepository roastRepository;
+    private final PackingTicketRepository packingRepository;
 
-    public AdminMiscController(AuditLogRepository auditRepository, RoastBatchRepository roastRepository) {
+    public AdminMiscController(
+            AuditLogRepository auditRepository,
+            RoastBatchRepository roastRepository,
+            PackingTicketRepository packingRepository) {
         this.auditRepository = auditRepository;
         this.roastRepository = roastRepository;
+        this.packingRepository = packingRepository;
     }
 
     @GetMapping("/admin/audit")
@@ -89,6 +95,21 @@ public class AdminMiscController {
             qc.put("waiting", waiting);
             res.put("qc", qc);
         }
+
+        long unfinishedPacking = packingRepository.countByStateNot("COMPLETE");
+        if (unfinishedPacking > 0) {
+            Map<String, Object> packMap = new HashMap<>();
+            packMap.put("count", unfinishedPacking);
+            packMap.put("tasks", Collections.emptyList());
+            List<Map<String, Object>> waiting = new ArrayList<>();
+            Map<String, Object> w = new HashMap<>();
+            w.put("count", unfinishedPacking);
+            w.put("label", "packing tickets not finished");
+            waiting.add(w);
+            packMap.put("waiting", waiting);
+            res.put("packing", packMap);
+        }
+
         return res;
     }
 }

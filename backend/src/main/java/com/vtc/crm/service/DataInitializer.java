@@ -22,6 +22,7 @@ public class DataInitializer implements CommandLineRunner {
     private final InventoryLotRepository inventoryLotRepository;
     private final RoastBatchRepository roastRepository;
     private final OutsideJobRepository outsideJobRepository;
+    private final PackingTicketRepository packingRepository;
     private final PasswordEncoder passwordEncoder;
 
     public DataInitializer(
@@ -36,6 +37,7 @@ public class DataInitializer implements CommandLineRunner {
             InventoryLotRepository inventoryLotRepository,
             RoastBatchRepository roastRepository,
             OutsideJobRepository outsideJobRepository,
+            PackingTicketRepository packingRepository,
             PasswordEncoder passwordEncoder) {
         this.userRepository = userRepository;
         this.profileRepository = profileRepository;
@@ -48,6 +50,7 @@ public class DataInitializer implements CommandLineRunner {
         this.inventoryLotRepository = inventoryLotRepository;
         this.roastRepository = roastRepository;
         this.outsideJobRepository = outsideJobRepository;
+        this.packingRepository = packingRepository;
         this.passwordEncoder = passwordEncoder;
     }
 
@@ -59,6 +62,7 @@ public class DataInitializer implements CommandLineRunner {
         seedInwardAndInventory();
         seedRoastBatches();
         seedOutsideJobs();
+        seedPackingTickets();
     }
 
     private void seedUsersAndMasters() {
@@ -501,6 +505,27 @@ public class DataInitializer implements CommandLineRunner {
         job.setCreatedAt(LocalDateTime.now().minusHours(4));
         job.setUpdatedAt(LocalDateTime.now().minusHours(4));
         outsideJobRepository.save(job);
+    }
+
+    private void seedPackingTickets() {
+        if (packingRepository.count() > 0) return;
+
+        // Seed 1: Ticket #1 Filter blend 20 x 500g (IN PROGRESS, QA HOLD, 12/20 packs, 6.2 kg used, 1 rejected)
+        PackingTicket t1 = new PackingTicket();
+        t1.setProductName("Filter blend");
+        t1.setDemandType("STOCK");
+        t1.setPacksTarget(20);
+        t1.setPacksDone(12);
+        t1.setPackG(500.0);
+        t1.setLabelRef("Standard retail label (O-18)");
+        t1.setInputKg(6.2);
+        t1.setRejectedPacks(1);
+        t1.setFinishedStatus("QC_HOLD");
+        t1.setState("IN_PROGRESS");
+        t1.setCreatedByName("Owner (Demo)");
+        t1.setCreatedAt(LocalDateTime.now().minusHours(5));
+        t1.setUpdatedAt(LocalDateTime.now().minusHours(1));
+        packingRepository.save(t1);
     }
 }
 

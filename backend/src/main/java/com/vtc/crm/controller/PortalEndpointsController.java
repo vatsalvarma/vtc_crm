@@ -6,6 +6,7 @@ import com.vtc.crm.entity.InventoryLot;
 import com.vtc.crm.entity.MaintenanceTicket;
 import com.vtc.crm.entity.MasterRecord;
 import com.vtc.crm.entity.OutsideJob;
+import com.vtc.crm.entity.PackingTicket;
 import com.vtc.crm.entity.RoastBatch;
 import com.vtc.crm.entity.Task;
 import com.vtc.crm.entity.User;
@@ -15,6 +16,7 @@ import com.vtc.crm.repository.InventoryLotRepository;
 import com.vtc.crm.repository.MaintenanceTicketRepository;
 import com.vtc.crm.repository.MasterRecordRepository;
 import com.vtc.crm.repository.OutsideJobRepository;
+import com.vtc.crm.repository.PackingTicketRepository;
 import com.vtc.crm.repository.RoastBatchRepository;
 import com.vtc.crm.repository.TaskRepository;
 import com.vtc.crm.repository.UserRepository;
@@ -41,10 +43,10 @@ public class PortalEndpointsController {
     private final InwardReceiptRepository inwardReceiptRepository;
     private final InventoryLotRepository inventoryLotRepository;
     private final OutsideJobRepository outsideJobRepository;
+    private final PackingTicketRepository packingRepository;
 
     private final List<Map<String, Object>> transfersList = new CopyOnWriteArrayList<>();
     private final List<Map<String, Object>> ordersList = new CopyOnWriteArrayList<>();
-    private final List<Map<String, Object>> packingJobsList = new CopyOnWriteArrayList<>();
     private final List<Map<String, Object>> blendRecipes = new CopyOnWriteArrayList<>();
     private final List<Map<String, Object>> blendJobs = new CopyOnWriteArrayList<>();
     private final List<Map<String, Object>> grindJobs = new CopyOnWriteArrayList<>();
@@ -70,7 +72,8 @@ public class PortalEndpointsController {
             TaskRepository taskRepository,
             InwardReceiptRepository inwardReceiptRepository,
             InventoryLotRepository inventoryLotRepository,
-            OutsideJobRepository outsideJobRepository) {
+            OutsideJobRepository outsideJobRepository,
+            PackingTicketRepository packingRepository) {
         this.roastRepository = roastRepository;
         this.counterRepository = counterRepository;
         this.masterRepository = masterRepository;
@@ -80,6 +83,7 @@ public class PortalEndpointsController {
         this.inwardReceiptRepository = inwardReceiptRepository;
         this.inventoryLotRepository = inventoryLotRepository;
         this.outsideJobRepository = outsideJobRepository;
+        this.packingRepository = packingRepository;
 
         initDefaults();
     }
@@ -210,7 +214,7 @@ public class PortalEndpointsController {
         long roasts = 0;
         try { roasts = roastRepository.count(); } catch (Exception ignored) {}
         s.put("roasts", roasts);
-        s.put("packing", packingJobsList.size());
+        s.put("packing", packingRepository.count());
         s.put("team_tasks", activeTasks);
         s.put("to_review", toReviewTasks);
         s.put("held", 0);
@@ -262,7 +266,11 @@ public class PortalEndpointsController {
             }
         }
         options.put("people", people);
-        options.put("pack_jobs", packingJobsList);
+        List<Map<String, Object>> packJobs = new ArrayList<>();
+        for (PackingTicket pt : packingRepository.findByStateNotOrderByCreatedAtDesc("COMPLETE")) {
+            packJobs.add(mapPackingTicket(pt));
+        }
+        options.put("pack_jobs", packJobs);
         options.put("orders", ordersList);
 
         return options;
@@ -1102,54 +1110,169 @@ public class PortalEndpointsController {
     @GetMapping("/packing")
     public Map<String, Object> getPacking() {
         Map<String, Object> res = new HashMap<>();
-        res.put("jobs", packingJobsList);
-
+        List<PackingTicket> dbTickets = packingRepository.findAllByOrderByCreatedAtDesc();
+        List<Map<String, Object>> jobs = new ArrayList<>();
+        for (PackingTicket t : dbTickets) {
+            jobs.add(mapPackingTicket(t));
+        }
+        res.put("jobs", jobs);
         res.put("sources", inventoryLotRepository.findAllByOrderByCreatedAtDesc());
         return res;
     }
 
     @PostMapping("/packing")
-    public Map<String, Object> createPackingTicket(@RequestBody Map<String, Object> req) {
-        Map<String, Object> job = new HashMap<>(req);
-        long id = packingJobsList.size() + 1;
-        job.put("id", id);
-        job.put("packs_done", 0);
-        job.put("packs_target", req.getOrDefault("packs_target", 100));
-        job.put("pack_g", req.getOrDefault("pack_g", 250));
-        job.put("state", "OPEN");
-        job.put("finished_status", "QC_HOLD");
-        packingJobsList.add(job);
-        return job;
+    public Map<String, Object> createPackingTicket(
+            @RequestBody Map<String, Object> req,
+            @AuthenticationPrincipal User currentUser) {
+        String productName = req.containsKey("product_name") && req.get("product_name") != null
+                ? req.get("product_name").toString() : "Roasted Blend";
+        String demandType = req.containsKey("demand_type") && req.get("demand_type") != null
+                ? req.get("demand_type").toString() : "STOCK";
+        int packsTarget = req.containsKey("packs_target") && req.get("packs_target") != null
+                ? Integer.parseInt(req.get("packs_target").toString()) : 20;
+        double packG = req.containsKey("pack_g") && req.get("pack_g") != null
+                ? Double.parseDouble(req.get("pack_g").toString()) : 500.0;
+        String labelRef = req.containsKey("label_ref") && req.get("label_ref") != null
+                ? req.get("label_ref").toString() : "";
+
+        PackingTicket ticket = new PackingTicket();
+        ticket.setProductName(productName);
+        ticket.setDemandType(demandType);
+        ticket.setPacksTarget(packsTarget);
+        ticket.setPacksDone(0);
+        ticket.setPackG(packG);
+        ticket.setLabelRef(labelRef);
+        ticket.setRejectedPacks(0);
+        ticket.setFinishedStatus("QC_HOLD");
+        ticket.setState("OPEN");
+        ticket.setCreatedByName(currentUser != null ? currentUser.getFullName() : "Owner (Demo)");
+        ticket.setCreatedAt(LocalDateTime.now());
+        ticket.setUpdatedAt(LocalDateTime.now());
+
+        PackingTicket saved = packingRepository.save(ticket);
+        return mapPackingTicket(saved);
     }
 
     @PostMapping("/packing/{id}/run")
-    public Map<String, Object> runPackingTicket(@PathVariable long id, @RequestBody Map<String, Object> req) {
-        Map<String, Object> res = new HashMap<>(req);
-        res.put("packs_done", req.getOrDefault("good_packs", 50));
-        res.put("loss_kg", 0.2);
-        res.put("code", "PACK-LOT-" + id);
-        res.put("lot_id", id);
-        res.put("packs", req.getOrDefault("good_packs", 50));
+    public ResponseEntity<?> runPackingTicket(
+            @PathVariable long id,
+            @RequestBody Map<String, Object> req) {
+        Optional<PackingTicket> opt = packingRepository.findById(id);
+        if (opt.isEmpty()) return ResponseEntity.notFound().build();
+        PackingTicket ticket = opt.get();
 
-        for (Map<String, Object> j : packingJobsList) {
-            if (Objects.equals(j.get("id"), id)) {
-                j.put("packs_done", req.getOrDefault("good_packs", 50));
-                j.put("state", "COMPLETE");
-                break;
-            }
+        Long sourceLotId = req.containsKey("source_lot_id") && req.get("source_lot_id") != null
+                ? Long.parseLong(req.get("source_lot_id").toString()) : null;
+        double inputKg = req.containsKey("input_kg") && req.get("input_kg") != null
+                ? Double.parseDouble(req.get("input_kg").toString()) : 0.0;
+        int goodPacks = req.containsKey("good_packs") && req.get("good_packs") != null
+                ? Integer.parseInt(req.get("good_packs").toString()) : 0;
+        int rejectedPacks = req.containsKey("rejected_packs") && req.get("rejected_packs") != null
+                ? Integer.parseInt(req.get("rejected_packs").toString()) : 0;
+
+        int newDone = ticket.getPacksDone() + goodPacks;
+        ticket.setPacksDone(newDone);
+        ticket.setRejectedPacks(ticket.getRejectedPacks() + rejectedPacks);
+        double prevInput = ticket.getInputKg() != null ? ticket.getInputKg() : 0.0;
+        ticket.setInputKg(prevInput + inputKg);
+        if (sourceLotId != null) ticket.setSourceLotId(sourceLotId);
+
+        if (newDone >= ticket.getPacksTarget()) {
+            ticket.setState("COMPLETE");
+        } else {
+            ticket.setState("IN_PROGRESS");
         }
-        return res;
+
+        // Deduct input coffee from source inventory lot
+        if (sourceLotId != null && inputKg > 0) {
+            inventoryLotRepository.findById(sourceLotId).ifPresent(lot -> {
+                double remainingAvail = Math.max(0.0, lot.getAvailableKg() - inputKg);
+                lot.setAvailableKg(remainingAvail);
+                lot.setKg(Math.max(0.0, lot.getKg() - inputKg));
+                lot.setUpdatedAt(LocalDateTime.now());
+                if (remainingAvail <= 0.001) lot.setStatus("CONSUMED");
+                inventoryLotRepository.save(lot);
+            });
+        }
+
+        double expectedPackKg = (goodPacks * ticket.getPackG()) / 1000.0;
+        double lossKg = Math.max(0.0, inputKg - expectedPackKg);
+        lossKg = Math.round(lossKg * 1000.0) / 1000.0;
+
+        String lotCode = "LOT-PACK-" + ticket.getId();
+        InventoryLot packLot = new InventoryLot();
+        packLot.setCode(lotCode);
+        packLot.setProduct(ticket.getProductName() + " (" + ticket.getPackG().intValue() + "g)");
+        packLot.setName(ticket.getProductName() + " (" + ticket.getPackG().intValue() + "g)");
+        packLot.setStage("PACKED");
+        packLot.setLocation("PROD-01");
+        packLot.setOwner("VTC");
+        packLot.setStatus("QC_HOLD");
+        packLot.setBagKind("SOUND");
+        packLot.setBags(goodPacks);
+        packLot.setKg(expectedPackKg);
+        packLot.setAvailableKg(0.0);
+        packLot.setCreatedAt(LocalDateTime.now());
+        InventoryLot savedLot = inventoryLotRepository.save(packLot);
+
+        ticket.setOutputLotId(savedLot.getId());
+        ticket.setOutputLotCode(savedLot.getCode());
+        ticket.setUpdatedAt(LocalDateTime.now());
+        packingRepository.save(ticket);
+
+        Map<String, Object> res = new HashMap<>();
+        res.put("packs_done", ticket.getPacksDone());
+        res.put("loss_kg", lossKg);
+        res.put("code", lotCode);
+        res.put("lot_id", savedLot.getId());
+        res.put("packs", goodPacks);
+        return ResponseEntity.ok(res);
     }
 
     @PostMapping("/packing/{id}/release")
-    public Map<String, Object> releasePackingTicket(@PathVariable long id, @RequestBody Map<String, Object> req) {
-        for (Map<String, Object> j : packingJobsList) {
-            if (Objects.equals(j.get("id"), id)) {
-                j.put("finished_status", "RELEASED");
-                return j;
-            }
+    public ResponseEntity<?> releasePackingTicket(@PathVariable long id, @RequestBody Map<String, Object> req) {
+        Optional<PackingTicket> opt = packingRepository.findById(id);
+        if (opt.isEmpty()) return ResponseEntity.notFound().build();
+        PackingTicket ticket = opt.get();
+
+        boolean approve = req.containsKey("approve") ? Boolean.parseBoolean(req.get("approve").toString()) : true;
+        String decision = approve ? "RELEASED" : "REJECTED";
+        ticket.setFinishedStatus(decision);
+        ticket.setUpdatedAt(LocalDateTime.now());
+        packingRepository.save(ticket);
+
+        if (ticket.getOutputLotId() != null) {
+            inventoryLotRepository.findById(ticket.getOutputLotId()).ifPresent(lot -> {
+                lot.setStatus(decision);
+                if ("RELEASED".equals(decision)) {
+                    lot.setAvailableKg(lot.getKg());
+                } else {
+                    lot.setAvailableKg(0.0);
+                }
+                lot.setUpdatedAt(LocalDateTime.now());
+                inventoryLotRepository.save(lot);
+            });
         }
-        return req;
+        return ResponseEntity.ok(mapPackingTicket(ticket));
+    }
+
+    private Map<String, Object> mapPackingTicket(PackingTicket t) {
+        Map<String, Object> m = new HashMap<>();
+        m.put("id", t.getId());
+        m.put("product_name", t.getProductName());
+        m.put("demand_type", t.getDemandType());
+        m.put("packs_target", t.getPacksTarget());
+        m.put("packs_done", t.getPacksDone());
+        m.put("pack_g", t.getPackG());
+        m.put("label_ref", t.getLabelRef());
+        m.put("input_kg", t.getInputKg());
+        m.put("rejected_packs", t.getRejectedPacks());
+        m.put("finished_status", t.getFinishedStatus());
+        m.put("state", t.getState());
+        m.put("source_lot_id", t.getSourceLotId());
+        m.put("output_lot_id", t.getOutputLotId());
+        m.put("created_at", t.getCreatedAt() != null ? t.getCreatedAt().toString() : LocalDateTime.now().toString());
+        return m;
     }
 
     // ---------------------------------------------------- /orders
@@ -1296,7 +1419,7 @@ public class PortalEndpointsController {
 
         Map<String, Object> pk = new HashMap<>();
         pk.put("kg", 0.0);
-        pk.put("runs", packingJobsList.size());
+        pk.put("runs", packingRepository.count());
         res.put("packing", pk);
 
         List<Map<String, Object>> stock = new ArrayList<>();
