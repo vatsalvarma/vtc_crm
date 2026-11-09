@@ -5,6 +5,7 @@ import com.vtc.crm.entity.InwardReceipt;
 import com.vtc.crm.entity.InventoryLot;
 import com.vtc.crm.entity.MaintenanceTicket;
 import com.vtc.crm.entity.MasterRecord;
+import com.vtc.crm.entity.RoastBatch;
 import com.vtc.crm.entity.Task;
 import com.vtc.crm.entity.User;
 import com.vtc.crm.repository.CounterBillRepository;
@@ -845,7 +846,76 @@ public class PortalEndpointsController {
     // ---------------------------------------------------- /qc
     @GetMapping("/qc")
     public List<Map<String, Object>> getQcList() {
-        return Collections.emptyList();
+        List<RoastBatch> all = roastRepository.findAllByOrderByCreatedAtDesc();
+        List<Map<String, Object>> list = new ArrayList<>();
+        for (RoastBatch b : all) {
+            Map<String, Object> m = new HashMap<>();
+            m.put("id", b.getId());
+            m.put("code", b.getBatchCode());
+            m.put("input_kg", b.getGreenKg() != null ? b.getGreenKg() : 0.0);
+            m.put("output_kg", b.getRoastedKg() != null ? b.getRoastedKg() : 0.0);
+            double lossKg = (b.getGreenKg() != null && b.getRoastedKg() != null) ? b.getGreenKg() - b.getRoastedKg() : 0.0;
+            m.put("loss_kg", lossKg);
+            m.put("qc_status", b.getQcStatus() != null ? b.getQcStatus() : "RELEASED");
+            m.put("abnormal", Boolean.TRUE.equals(b.getAbnormal()));
+            m.put("created_at", b.getCreatedAt() != null ? b.getCreatedAt().toString() : LocalDateTime.now().toString());
+            list.add(m);
+        }
+        return list;
+    }
+
+    @PostMapping("/qc/{id}/decision")
+    public ResponseEntity<?> decideQc(
+            @PathVariable Long id,
+            @RequestBody Map<String, Object> req,
+            @AuthenticationPrincipal User currentUser) {
+        Optional<RoastBatch> opt = roastRepository.findById(id);
+        if (opt.isEmpty()) return ResponseEntity.notFound().build();
+        RoastBatch batch = opt.get();
+
+        String decision = req.getOrDefault("decision", "RELEASED").toString();
+        String note = req.containsKey("note") && req.get("note") != null ? req.get("note").toString() : "";
+
+        batch.setQcStatus(decision);
+        if (note != null && !note.isBlank()) {
+            String existingNotes = batch.getOperatorNotes() != null ? batch.getOperatorNotes() + " | " : "";
+            batch.setOperatorNotes(existingNotes + "QC Decision: " + decision + " (" + note + ")");
+        }
+        RoastBatch savedBatch = roastRepository.save(batch);
+
+        // Update the corresponding roasted inventory lot in MySQL
+        if (batch.getOutputLotId() != null) {
+            inventoryLotRepository.findById(batch.getOutputLotId()).ifPresent(lot -> {
+                lot.setStatus(decision);
+                if ("RELEASED".equalsIgnoreCase(decision)) {
+                    lot.setAvailableKg(lot.getKg());
+                } else if ("REJECTED".equalsIgnoreCase(decision)) {
+                    lot.setAvailableKg(0.0);
+                }
+                lot.setUpdatedAt(LocalDateTime.now());
+                inventoryLotRepository.save(lot);
+            });
+        } else if (batch.getOutputLotCode() != null) {
+            inventoryLotRepository.findAll().stream()
+                    .filter(l -> batch.getOutputLotCode().equalsIgnoreCase(l.getCode()))
+                    .findFirst()
+                    .ifPresent(lot -> {
+                        lot.setStatus(decision);
+                        if ("RELEASED".equalsIgnoreCase(decision)) {
+                            lot.setAvailableKg(lot.getKg());
+                        } else if ("REJECTED".equalsIgnoreCase(decision)) {
+                            lot.setAvailableKg(0.0);
+                        }
+                        lot.setUpdatedAt(LocalDateTime.now());
+                        inventoryLotRepository.save(lot);
+                    });
+        }
+
+        Map<String, Object> res = new HashMap<>();
+        res.put("id", savedBatch.getId());
+        res.put("code", savedBatch.getBatchCode());
+        res.put("qc_status", savedBatch.getQcStatus());
+        return ResponseEntity.ok(res);
     }
 
     @GetMapping("/qc/config")

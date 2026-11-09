@@ -2,6 +2,7 @@ package com.vtc.crm.controller;
 
 import com.vtc.crm.entity.AuditLog;
 import com.vtc.crm.repository.AuditLogRepository;
+import com.vtc.crm.repository.RoastBatchRepository;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.*;
@@ -11,9 +12,11 @@ import java.util.*;
 public class AdminMiscController {
 
     private final AuditLogRepository auditRepository;
+    private final RoastBatchRepository roastRepository;
 
-    public AdminMiscController(AuditLogRepository auditRepository) {
+    public AdminMiscController(AuditLogRepository auditRepository, RoastBatchRepository roastRepository) {
         this.auditRepository = auditRepository;
+        this.roastRepository = roastRepository;
     }
 
     @GetMapping("/admin/audit")
@@ -72,7 +75,21 @@ public class AdminMiscController {
 
     @GetMapping("/pending")
     public Map<String, Object> getPending() {
-        return Collections.emptyMap();
+        Map<String, Object> res = new HashMap<>();
+        long holdCount = roastRepository.countByQcStatus("QC_HOLD");
+        if (holdCount > 0) {
+            Map<String, Object> qc = new HashMap<>();
+            qc.put("count", holdCount);
+            qc.put("tasks", Collections.emptyList());
+            List<Map<String, Object>> waiting = new ArrayList<>();
+            Map<String, Object> w = new HashMap<>();
+            w.put("count", holdCount);
+            w.put("label", "roast batches waiting for a quality decision");
+            waiting.add(w);
+            qc.put("waiting", waiting);
+            res.put("qc", qc);
+        }
+        return res;
     }
 }
 

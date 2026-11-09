@@ -20,6 +20,7 @@ public class DataInitializer implements CommandLineRunner {
     private final MessageRepository messageRepository;
     private final InwardReceiptRepository inwardReceiptRepository;
     private final InventoryLotRepository inventoryLotRepository;
+    private final RoastBatchRepository roastRepository;
     private final PasswordEncoder passwordEncoder;
 
     public DataInitializer(
@@ -32,6 +33,7 @@ public class DataInitializer implements CommandLineRunner {
             MessageRepository messageRepository,
             InwardReceiptRepository inwardReceiptRepository,
             InventoryLotRepository inventoryLotRepository,
+            RoastBatchRepository roastRepository,
             PasswordEncoder passwordEncoder) {
         this.userRepository = userRepository;
         this.profileRepository = profileRepository;
@@ -42,6 +44,7 @@ public class DataInitializer implements CommandLineRunner {
         this.messageRepository = messageRepository;
         this.inwardReceiptRepository = inwardReceiptRepository;
         this.inventoryLotRepository = inventoryLotRepository;
+        this.roastRepository = roastRepository;
         this.passwordEncoder = passwordEncoder;
     }
 
@@ -51,6 +54,7 @@ public class DataInitializer implements CommandLineRunner {
         seedTasks();
         seedComms();
         seedInwardAndInventory();
+        seedRoastBatches();
     }
 
     private void seedUsersAndMasters() {
@@ -391,6 +395,81 @@ public class DataInitializer implements CommandLineRunner {
         lotPartial.setNominalKg(perBag);
         lotPartial.setCreatedAt(LocalDateTime.now().minusDays(3));
         inventoryLotRepository.save(lotPartial);
+    }
+
+    private void seedRoastBatches() {
+        if (roastRepository.countByQcStatus("QC_HOLD") > 0) return;
+
+        // Seed 1: RST-ROBCAB-261027-03 waiting on QC HOLD (as shown in reference image)
+        RoastBatch holdBatch = new RoastBatch();
+        holdBatch.setBatchCode("RST-ROBCAB-261027-03");
+        holdBatch.setGreenKg(30.0);
+        holdBatch.setRoastedKg(24.1);
+        holdBatch.setLossPercent(19.67);
+        holdBatch.setDurationMin(14);
+        holdBatch.setProfileName("Dark Roast (Espresso / South Indian Filter)");
+        holdBatch.setRoasterName("Ramesh (Roaster)");
+        holdBatch.setQcStatus("QC_HOLD");
+        holdBatch.setAbnormal(true);
+        holdBatch.setInputsSummary("Robusta Cherry AB (30.0 kg)");
+        holdBatch.setOperatorNotes("Temperature spiked slightly in finishing phase");
+        holdBatch.setCreatedAt(LocalDateTime.now().minusHours(2));
+
+        // Create the corresponding lot in inventory on QC_HOLD
+        InventoryLot lot = new InventoryLot();
+        lot.setCode("LOT-RST-ROBCAB-261027-03");
+        lot.setProduct("Robusta Cherry AB (Roasted)");
+        lot.setName("Robusta Cherry AB (Roasted)");
+        lot.setStage("ROASTED");
+        lot.setLocation("PROD-01");
+        lot.setOwner("VTC");
+        lot.setStatus("QC_HOLD");
+        lot.setBagKind("SOUND");
+        lot.setBags(1);
+        lot.setKg(24.1);
+        lot.setAvailableKg(0.0);
+        lot.setResting(true);
+        lot.setReadyFrom(java.time.LocalDate.now().plusDays(1));
+        lot.setCreatedAt(LocalDateTime.now().minusHours(2));
+        InventoryLot savedLot = inventoryLotRepository.save(lot);
+
+        holdBatch.setOutputLotId(savedLot.getId());
+        holdBatch.setOutputLotCode(savedLot.getCode());
+        roastRepository.save(holdBatch);
+
+        // Seed 2: RST-ARAPAS-261027-02 (RELEASED)
+        if (roastRepository.findAll().stream().noneMatch(b -> "RST-ARAPAS-261027-02".equalsIgnoreCase(b.getBatchCode()))) {
+            RoastBatch b2 = new RoastBatch();
+            b2.setBatchCode("RST-ARAPAS-261027-02");
+            b2.setGreenKg(60.0);
+            b2.setRoastedKg(50.6);
+            b2.setLossPercent(15.67);
+            b2.setDurationMin(13);
+            b2.setProfileName("Medium Roast (Standard Filter)");
+            b2.setRoasterName("Ramesh (Roaster)");
+            b2.setQcStatus("RELEASED");
+            b2.setAbnormal(false);
+            b2.setInputsSummary("Arabica Plantation A (60.0 kg)");
+            b2.setCreatedAt(LocalDateTime.now().minusDays(1));
+            roastRepository.save(b2);
+        }
+
+        // Seed 3: RST-ROBCAB-261027-01 (RELEASED)
+        if (roastRepository.findAll().stream().noneMatch(b -> "RST-ROBCAB-261027-01".equalsIgnoreCase(b.getBatchCode()))) {
+            RoastBatch b3 = new RoastBatch();
+            b3.setBatchCode("RST-ROBCAB-261027-01");
+            b3.setGreenKg(120.0);
+            b3.setRoastedKg(101.0);
+            b3.setLossPercent(15.83);
+            b3.setDurationMin(15);
+            b3.setProfileName("Dark Roast (Espresso)");
+            b3.setRoasterName("Ramesh (Roaster)");
+            b3.setQcStatus("RELEASED");
+            b3.setAbnormal(false);
+            b3.setInputsSummary("Robusta Cherry AB (120.0 kg)");
+            b3.setCreatedAt(LocalDateTime.now().minusDays(2));
+            roastRepository.save(b3);
+        }
     }
 }
 

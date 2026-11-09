@@ -69,7 +69,7 @@ export const ALL_PERMISSIONS = [
   "inventory.view", "inventory.transfer", "stock.cycle_count", "roast.view", "roast.execute",
   "outside.view", "outside.execute", "pack.view", "pack.execute", "counter.sell", "counter.cash",
   "counter.customers", "counter.insights", "outgoing.view", "outgoing.create", "maintenance.raise",
-  "maintenance.manage", "team.view", "reports.operational", "recipe.view_public", "qc.view",
+  "maintenance.manage", "team.view", "reports.operational", "recipe.view_public", "qc.view", "roast.qc_release",
   "masters.view", "masters.create_draft", "masters.approve", "system.settings", "system.users",
   "system.roles", "comms.oversight", "team.profiles", "team.hierarchy", "inward.receive",
   "roast.record", "pack.record", "counter.cash_verify", "system.grants", "system.audit", "system.preview_as"

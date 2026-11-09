@@ -13,6 +13,8 @@ import java.util.List;
 public interface RoastBatchRepository extends JpaRepository<RoastBatch, Long> {
     List<RoastBatch> findAllByOrderByCreatedAtDesc();
     List<RoastBatch> findTop30ByOrderByCreatedAtDesc();
+    long countByQcStatus(String qcStatus);
+    List<RoastBatch> findByQcStatusOrderByCreatedAtDesc(String qcStatus);
 
     @Query("SELECT r FROM RoastBatch r WHERE r.createdAt >= :start AND r.createdAt < :end ORDER BY r.createdAt DESC")
     List<RoastBatch> findBetweenDates(@Param("start") LocalDateTime start, @Param("end") LocalDateTime end);
