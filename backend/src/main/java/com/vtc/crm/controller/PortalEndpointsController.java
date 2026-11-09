@@ -5,6 +5,8 @@ import com.vtc.crm.entity.InwardReceipt;
 import com.vtc.crm.entity.InventoryLot;
 import com.vtc.crm.entity.MaintenanceTicket;
 import com.vtc.crm.entity.MasterRecord;
+import com.vtc.crm.entity.OrderDispatch;
+import com.vtc.crm.entity.OutgoingOrder;
 import com.vtc.crm.entity.OutsideJob;
 import com.vtc.crm.entity.PackingTicket;
 import com.vtc.crm.entity.RoastBatch;
@@ -15,6 +17,8 @@ import com.vtc.crm.repository.InwardReceiptRepository;
 import com.vtc.crm.repository.InventoryLotRepository;
 import com.vtc.crm.repository.MaintenanceTicketRepository;
 import com.vtc.crm.repository.MasterRecordRepository;
+import com.vtc.crm.repository.OrderDispatchRepository;
+import com.vtc.crm.repository.OutgoingOrderRepository;
 import com.vtc.crm.repository.OutsideJobRepository;
 import com.vtc.crm.repository.PackingTicketRepository;
 import com.vtc.crm.repository.RoastBatchRepository;
@@ -44,9 +48,10 @@ public class PortalEndpointsController {
     private final InventoryLotRepository inventoryLotRepository;
     private final OutsideJobRepository outsideJobRepository;
     private final PackingTicketRepository packingRepository;
+    private final OutgoingOrderRepository orderRepository;
+    private final OrderDispatchRepository dispatchRepository;
 
     private final List<Map<String, Object>> transfersList = new CopyOnWriteArrayList<>();
-    private final List<Map<String, Object>> ordersList = new CopyOnWriteArrayList<>();
     private final List<Map<String, Object>> blendRecipes = new CopyOnWriteArrayList<>();
     private final List<Map<String, Object>> blendJobs = new CopyOnWriteArrayList<>();
     private final List<Map<String, Object>> grindJobs = new CopyOnWriteArrayList<>();
@@ -73,7 +78,9 @@ public class PortalEndpointsController {
             InwardReceiptRepository inwardReceiptRepository,
             InventoryLotRepository inventoryLotRepository,
             OutsideJobRepository outsideJobRepository,
-            PackingTicketRepository packingRepository) {
+            PackingTicketRepository packingRepository,
+            OutgoingOrderRepository orderRepository,
+            OrderDispatchRepository dispatchRepository) {
         this.roastRepository = roastRepository;
         this.counterRepository = counterRepository;
         this.masterRepository = masterRepository;
@@ -84,6 +91,8 @@ public class PortalEndpointsController {
         this.inventoryLotRepository = inventoryLotRepository;
         this.outsideJobRepository = outsideJobRepository;
         this.packingRepository = packingRepository;
+        this.orderRepository = orderRepository;
+        this.dispatchRepository = dispatchRepository;
 
         initDefaults();
     }
@@ -218,7 +227,7 @@ public class PortalEndpointsController {
         s.put("team_tasks", activeTasks);
         s.put("to_review", toReviewTasks);
         s.put("held", 0);
-        s.put("orders", ordersList.size());
+        s.put("orders", orderRepository.count());
         long bills = 0;
         try { bills = counterRepository.count(); } catch (Exception ignored) {}
         s.put("pending_invoices", bills);
@@ -271,7 +280,7 @@ public class PortalEndpointsController {
             packJobs.add(mapPackingTicket(pt));
         }
         options.put("pack_jobs", packJobs);
-        options.put("orders", ordersList);
+        options.put("orders", getOrders());
 
         return options;
     }
@@ -1128,10 +1137,18 @@ public class PortalEndpointsController {
                 ? req.get("product_name").toString() : "Roasted Blend";
         String demandType = req.containsKey("demand_type") && req.get("demand_type") != null
                 ? req.get("demand_type").toString() : "STOCK";
-        int packsTarget = req.containsKey("packs_target") && req.get("packs_target") != null
-                ? Integer.parseInt(req.get("packs_target").toString()) : 20;
-        double packG = req.containsKey("pack_g") && req.get("pack_g") != null
-                ? Double.parseDouble(req.get("pack_g").toString()) : 500.0;
+        int packsTarget = 20;
+        if (req.containsKey("packs_target") && req.get("packs_target") != null && !req.get("packs_target").toString().isBlank()) {
+            try {
+                packsTarget = (int) Math.round(Double.parseDouble(req.get("packs_target").toString()));
+            } catch (Exception ignored) {}
+        }
+        double packG = 500.0;
+        if (req.containsKey("pack_g") && req.get("pack_g") != null && !req.get("pack_g").toString().isBlank()) {
+            try {
+                packG = Double.parseDouble(req.get("pack_g").toString());
+            } catch (Exception ignored) {}
+        }
         String labelRef = req.containsKey("label_ref") && req.get("label_ref") != null
                 ? req.get("label_ref").toString() : "";
 
@@ -1275,24 +1292,268 @@ public class PortalEndpointsController {
         return m;
     }
 
-    // ---------------------------------------------------- /orders
+    // ---------------------------------------------------- /orders & /dispatches
     @GetMapping("/orders")
     public List<Map<String, Object>> getOrders() {
-        return ordersList;
+        List<OutgoingOrder> dbOrders = orderRepository.findAllByOrderByCreatedAtDesc();
+        List<Map<String, Object>> res = new ArrayList<>();
+        for (OutgoingOrder o : dbOrders) {
+            res.add(mapOrder(o));
+        }
+        return res;
     }
 
     @PostMapping("/orders")
-    public Map<String, Object> createOrder(@RequestBody Map<String, Object> req) {
-        Map<String, Object> order = new HashMap<>(req);
-        long id = ordersList.size() + 1;
-        order.put("id", id);
-        order.put("state", "RESERVED");
-        order.put("cleared", true);
-        order.put("clearance_note", "Credit cleared");
-        order.put("dispatched_kg", 0.0);
-        order.put("dispatches", Collections.emptyList());
-        ordersList.add(order);
-        return order;
+    public Map<String, Object> createOrder(
+            @RequestBody Map<String, Object> req,
+            @AuthenticationPrincipal User currentUser) {
+        Long customerId = req.containsKey("customer_id") && req.get("customer_id") != null
+                ? Long.parseLong(req.get("customer_id").toString()) : 1L;
+
+        String customerName = "Sample Customer";
+        String customerPhone = "9849012345";
+        String customerAddress = "Road No 1, Banjara Hills, Hyderabad";
+
+        Optional<MasterRecord> custOpt = masterRepository.findById(customerId);
+        if (custOpt.isPresent()) {
+            customerName = custOpt.get().getName();
+        } else {
+            List<MasterRecord> list = masterRepository.findByKind("CUSTOMER");
+            if (!list.isEmpty()) customerName = list.get(0).getName();
+        }
+
+        String form = req.containsKey("form") && req.get("form") != null ? req.get("form").toString() : "ROASTED";
+        Long productId = req.containsKey("product_id") && req.get("product_id") != null && !req.get("product_id").toString().isBlank()
+                ? Long.parseLong(req.get("product_id").toString()) : null;
+        String item = req.containsKey("item") && req.get("item") != null ? req.get("item").toString() : "Filter blend roast, medium";
+        double quantityKg = req.containsKey("quantity_kg") && req.get("quantity_kg") != null
+                ? Double.parseDouble(req.get("quantity_kg").toString()) : 20.0;
+        boolean creditRequested = req.containsKey("credit_requested") && Boolean.parseBoolean(req.get("credit_requested").toString());
+        String notes = req.containsKey("notes") && req.get("notes") != null ? req.get("notes").toString() : "";
+
+        Long pricePerKgPaise = null;
+        if (req.containsKey("price_per_kg_paise") && req.get("price_per_kg_paise") != null) {
+            pricePerKgPaise = Long.parseLong(req.get("price_per_kg_paise").toString());
+        }
+        Integer gstRateBp = null;
+        if (req.containsKey("gst_rate_bp") && req.get("gst_rate_bp") != null) {
+            gstRateBp = Integer.parseInt(req.get("gst_rate_bp").toString());
+        }
+
+        OutgoingOrder order = new OutgoingOrder();
+        order.setCustomerId(customerId);
+        order.setCustomer(customerName);
+        order.setCustomerPhone(customerPhone);
+        order.setCustomerAddress(customerAddress);
+        order.setForm(form);
+        order.setProductId(productId);
+        order.setItem(item);
+        order.setQuantityKg(quantityKg);
+        order.setReservedKg(quantityKg); // Auto-reserve so it is immediately Ready to Go in Dispatch!
+        order.setDispatchedKg(0.0);
+        order.setPricePerKgPaise(pricePerKgPaise);
+        order.setGstRateBp(gstRateBp);
+        order.setCreditRequested(creditRequested);
+        order.setCleared(true);
+        order.setClearanceNote("Credit cleared");
+        order.setState("RESERVED"); // Ready to go in dispatch
+        order.setNotes(notes);
+        order.setCreatedByName(currentUser != null ? currentUser.getFullName() : "Admin");
+        order.setCreatedAt(LocalDateTime.now());
+        order.setUpdatedAt(LocalDateTime.now());
+
+        OutgoingOrder saved = orderRepository.save(order);
+        return mapOrder(saved);
+    }
+
+    @PostMapping("/orders/{id}/confirm")
+    public ResponseEntity<?> confirmOrder(@PathVariable Long id) {
+        Optional<OutgoingOrder> opt = orderRepository.findById(id);
+        if (opt.isEmpty()) return ResponseEntity.notFound().build();
+        OutgoingOrder order = opt.get();
+        order.setState("RESERVED");
+        order.setReservedKg(order.getQuantityKg());
+        order.setCleared(true);
+        order.setClearanceNote("Credit cleared");
+        order.setUpdatedAt(LocalDateTime.now());
+        orderRepository.save(order);
+
+        Map<String, Object> res = new HashMap<>();
+        res.put("id", id);
+        res.put("state", "RESERVED");
+        res.put("note", "Confirmed and stock reserved.");
+        return ResponseEntity.ok(res);
+    }
+
+    @PostMapping("/orders/{id}/reserve")
+    public ResponseEntity<?> reserveOrder(@PathVariable Long id) {
+        Optional<OutgoingOrder> opt = orderRepository.findById(id);
+        if (opt.isEmpty()) return ResponseEntity.notFound().build();
+        OutgoingOrder order = opt.get();
+        order.setState("RESERVED");
+        order.setReservedKg(order.getQuantityKg());
+        order.setUpdatedAt(LocalDateTime.now());
+        orderRepository.save(order);
+
+        Map<String, Object> res = new HashMap<>();
+        res.put("id", id);
+        res.put("state", "RESERVED");
+        return ResponseEntity.ok(res);
+    }
+
+    @PostMapping("/orders/{id}/cancel")
+    public ResponseEntity<?> cancelOrder(@PathVariable Long id) {
+        Optional<OutgoingOrder> opt = orderRepository.findById(id);
+        if (opt.isEmpty()) return ResponseEntity.notFound().build();
+        OutgoingOrder order = opt.get();
+        order.setState("CANCELLED");
+        order.setReservedKg(0.0);
+        order.setUpdatedAt(LocalDateTime.now());
+        orderRepository.save(order);
+
+        Map<String, Object> res = new HashMap<>();
+        res.put("id", id);
+        res.put("state", "CANCELLED");
+        return ResponseEntity.ok(res);
+    }
+
+    @PostMapping("/orders/{id}/dispatch")
+    public ResponseEntity<?> dispatchOrder(
+            @PathVariable Long id,
+            @RequestBody Map<String, Object> req) {
+        Optional<OutgoingOrder> opt = orderRepository.findById(id);
+        if (opt.isEmpty()) return ResponseEntity.notFound().build();
+        OutgoingOrder order = opt.get();
+
+        double stillToSend = Math.max(0.0, order.getQuantityKg() - order.getDispatchedKg());
+        double kg = req.containsKey("kg") && req.get("kg") != null
+                ? Double.parseDouble(req.get("kg").toString()) : stillToSend;
+        String mode = req.containsKey("mode") && req.get("mode") != null
+                ? req.get("mode").toString() : "RAPIDO";
+        String bookingRef = req.containsKey("booking_ref") && req.get("booking_ref") != null
+                ? req.get("booking_ref").toString() : "RAP-" + System.currentTimeMillis() % 10000;
+        String handoverTo = req.containsKey("handover_to") && req.get("handover_to") != null
+                ? req.get("handover_to").toString() : "Rider";
+        String evidence = req.containsKey("evidence") && req.get("evidence") != null
+                ? req.get("evidence").toString() : "";
+
+        OrderDispatch dispatch = new OrderDispatch();
+        dispatch.setOrderId(order.getId());
+        dispatch.setKg(kg);
+        dispatch.setMode(mode);
+        dispatch.setBookingRef(bookingRef);
+        dispatch.setHandoverTo(handoverTo);
+        dispatch.setEvidence(evidence);
+        dispatch.setCreatedAt(LocalDateTime.now());
+        OrderDispatch savedDispatch = dispatchRepository.save(dispatch);
+
+        order.setDispatchedKg(order.getDispatchedKg() + kg);
+        if (order.getDispatchedKg() >= order.getQuantityKg() - 0.001) {
+            order.setState("DISPATCHED");
+        }
+        order.setUpdatedAt(LocalDateTime.now());
+        orderRepository.save(order);
+
+        Map<String, Object> res = new HashMap<>();
+        res.put("invoice", "INV-" + order.getId());
+        res.put("dispatch_id", savedDispatch.getId());
+        return ResponseEntity.ok(res);
+    }
+
+    @PostMapping("/dispatches/{id}/deliver")
+    public ResponseEntity<?> deliverDispatch(
+            @PathVariable Long id,
+            @RequestBody Map<String, Object> req) {
+        Optional<OrderDispatch> opt = dispatchRepository.findById(id);
+        if (opt.isEmpty()) return ResponseEntity.notFound().build();
+        OrderDispatch dispatch = opt.get();
+
+        double deliveredKg = req.containsKey("delivered_kg") && req.get("delivered_kg") != null
+                ? Double.parseDouble(req.get("delivered_kg").toString()) : dispatch.getKg();
+        String podNote = req.containsKey("pod_note") && req.get("pod_note") != null
+                ? req.get("pod_note").toString() : "Signed by store manager";
+
+        dispatch.setDeliveredKg(deliveredKg);
+        dispatch.setPodNote(podNote);
+        dispatch.setDeliveredAt(LocalDateTime.now());
+        dispatchRepository.save(dispatch);
+
+        Long orderId = dispatch.getOrderId();
+        orderRepository.findById(orderId).ifPresent(order -> {
+            List<OrderDispatch> list = dispatchRepository.findByOrderIdOrderByCreatedAtDesc(orderId);
+            boolean allDelivered = list.stream().allMatch(d -> d.getDeliveredAt() != null);
+            if (allDelivered && order.getDispatchedKg() >= order.getQuantityKg() - 0.001) {
+                order.setState("DELIVERED");
+                order.setUpdatedAt(LocalDateTime.now());
+                orderRepository.save(order);
+            }
+        });
+
+        return ResponseEntity.ok(Collections.singletonMap("status", "DELIVERED"));
+    }
+
+    @GetMapping("/orders/{id}/slip")
+    public ResponseEntity<?> getOrderSlip(@PathVariable Long id) {
+        Optional<OutgoingOrder> opt = orderRepository.findById(id);
+        if (opt.isEmpty()) return ResponseEntity.notFound().build();
+        Map<String, Object> res = new HashMap<>();
+        res.put("company", "Vasavi Trading Company");
+        res.put("order", mapOrder(opt.get()));
+        return ResponseEntity.ok(res);
+    }
+
+    private Map<String, Object> mapOrder(OutgoingOrder o) {
+        Map<String, Object> m = new HashMap<>();
+        m.put("id", o.getId());
+        m.put("customer_id", o.getCustomerId());
+        m.put("customer", o.getCustomer());
+        m.put("customer_phone", o.getCustomerPhone());
+        m.put("customer_address", o.getCustomerAddress());
+        m.put("form", o.getForm());
+        m.put("product_id", o.getProductId());
+        m.put("item", o.getItem());
+        m.put("quantity_kg", o.getQuantityKg());
+        m.put("reserved_kg", o.getReservedKg());
+        m.put("dispatched_kg", o.getDispatchedKg());
+        m.put("price_per_kg_paise", o.getPricePerKgPaise());
+        m.put("gst_rate_bp", o.getGstRateBp());
+        m.put("credit_requested", Boolean.TRUE.equals(o.getCreditRequested()));
+        m.put("credit_note", o.getCreditNote());
+        m.put("cleared", Boolean.TRUE.equals(o.getCleared()));
+        m.put("clearance_note", o.getClearanceNote());
+        m.put("state", o.getState());
+        m.put("notes", o.getNotes());
+        m.put("created_at", o.getCreatedAt() != null ? o.getCreatedAt().toString() : LocalDateTime.now().toString());
+
+        List<Map<String, Object>> dispatches = new ArrayList<>();
+        List<OrderDispatch> list = dispatchRepository.findByOrderIdOrderByCreatedAtDesc(o.getId());
+        for (OrderDispatch d : list) {
+            Map<String, Object> dm = new HashMap<>();
+            dm.put("id", d.getId());
+            dm.put("order_id", d.getOrderId());
+            dm.put("kg", d.getKg());
+            dm.put("mode", d.getMode());
+            dm.put("booking_ref", d.getBookingRef());
+            dm.put("handover_to", d.getHandoverTo());
+            dm.put("evidence", d.getEvidence());
+            dm.put("delivered_kg", d.getDeliveredKg());
+            dm.put("pod_note", d.getPodNote());
+            dm.put("created_at", d.getCreatedAt() != null ? d.getCreatedAt().toString() : LocalDateTime.now().toString());
+            dm.put("delivered_at", d.getDeliveredAt() != null ? d.getDeliveredAt().toString() : null);
+            dispatches.add(dm);
+        }
+        m.put("dispatches", dispatches);
+
+        List<Map<String, Object>> invoices = new ArrayList<>();
+        if (o.getDispatchedKg() > 0) {
+            Map<String, Object> inv = new HashMap<>();
+            inv.put("id", o.getId());
+            inv.put("number", "INV-" + o.getId());
+            invoices.add(inv);
+        }
+        m.put("invoices", invoices);
+
+        return m;
     }
 
     // ---------------------------------------------------- /exceptions

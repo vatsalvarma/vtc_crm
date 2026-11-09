@@ -23,6 +23,7 @@ public class DataInitializer implements CommandLineRunner {
     private final RoastBatchRepository roastRepository;
     private final OutsideJobRepository outsideJobRepository;
     private final PackingTicketRepository packingRepository;
+    private final OutgoingOrderRepository orderRepository;
     private final PasswordEncoder passwordEncoder;
 
     public DataInitializer(
@@ -38,6 +39,7 @@ public class DataInitializer implements CommandLineRunner {
             RoastBatchRepository roastRepository,
             OutsideJobRepository outsideJobRepository,
             PackingTicketRepository packingRepository,
+            OutgoingOrderRepository orderRepository,
             PasswordEncoder passwordEncoder) {
         this.userRepository = userRepository;
         this.profileRepository = profileRepository;
@@ -51,6 +53,7 @@ public class DataInitializer implements CommandLineRunner {
         this.roastRepository = roastRepository;
         this.outsideJobRepository = outsideJobRepository;
         this.packingRepository = packingRepository;
+        this.orderRepository = orderRepository;
         this.passwordEncoder = passwordEncoder;
     }
 
@@ -63,6 +66,7 @@ public class DataInitializer implements CommandLineRunner {
         seedRoastBatches();
         seedOutsideJobs();
         seedPackingTickets();
+        seedOutgoingOrders();
     }
 
     private void seedUsersAndMasters() {
@@ -526,6 +530,36 @@ public class DataInitializer implements CommandLineRunner {
         t1.setCreatedAt(LocalDateTime.now().minusHours(5));
         t1.setUpdatedAt(LocalDateTime.now().minusHours(1));
         packingRepository.save(t1);
+    }
+
+    private void seedOutgoingOrders() {
+        if (orderRepository.count() > 0) return;
+
+        MasterRecord cust = masterRepository.findByKind("CUSTOMER").stream()
+                .filter(c -> "Sample Café, Banjara Hills".equalsIgnoreCase(c.getName()))
+                .findFirst()
+                .orElse(null);
+
+        OutgoingOrder o = new OutgoingOrder();
+        o.setCustomerId(cust != null ? cust.getId() : 1L);
+        o.setCustomer(cust != null ? cust.getName() : "Sample Café, Banjara Hills");
+        o.setCustomerPhone("9849012345");
+        o.setCustomerAddress("Road No 1, Banjara Hills, Hyderabad");
+        o.setForm("ROASTED");
+        o.setItem("Filter blend roast, medium");
+        o.setQuantityKg(20.0);
+        o.setReservedKg(20.0);
+        o.setDispatchedKg(0.0);
+        o.setPricePerKgPaise(45000L); // ₹450/kg
+        o.setGstRateBp(500); // 5%
+        o.setCreditRequested(false);
+        o.setCleared(true);
+        o.setClearanceNote("Credit cleared");
+        o.setState("RESERVED"); // Ready to go in dispatch!
+        o.setCreatedByName("Owner (Demo)");
+        o.setCreatedAt(LocalDateTime.now().minusHours(3));
+        o.setUpdatedAt(LocalDateTime.now().minusHours(3));
+        orderRepository.save(o);
     }
 }
 
