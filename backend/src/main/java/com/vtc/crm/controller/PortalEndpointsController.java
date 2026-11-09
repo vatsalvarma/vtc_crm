@@ -580,6 +580,9 @@ public class PortalEndpointsController {
                 t.setResolution(req.get("note").toString());
                 t.setResolvedById(currentUser != null ? currentUser.getId() : 1L);
                 t.setResolvedByName(currentUser != null ? currentUser.getFullName() : "Admin");
+            } else if (("RESOLVED".equalsIgnoreCase(t.getStatus()) || "CLOSED".equalsIgnoreCase(t.getStatus())) && (t.getResolvedByName() == null || t.getResolvedByName().isEmpty())) {
+                t.setResolvedById(currentUser != null ? currentUser.getId() : 1L);
+                t.setResolvedByName(currentUser != null ? currentUser.getFullName() : "Admin");
             }
             if (req.containsKey("assigned_to") && req.get("assigned_to") != null) {
                 try {
