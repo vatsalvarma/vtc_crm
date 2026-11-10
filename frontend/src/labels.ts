@@ -95,8 +95,17 @@ export function savedBanner() {
   const x = S.saved;
   if (!x || x.view !== S.view) return "";
   const bags = x.receipt ? x.receipt.lots.reduce((n, l) => n + l.bags, 0) : 0;
-  const btn = x.receipt ? (bags ? `<button class="btn btn-primary" data-baglabels>${icon("qr-code", 16)} Print ${bags} bag label${bags > 1 ? "s" : ""}</button>` : "")
-    : `<button class="btn btn-primary" data-label="${x.lot_id}">${icon("qr-code", 16)} Print label${x.copies > 1 ? "s" : ""}</button>`;
+  const btn = x.receipt ? (
+    `<div class="row" style="gap:8px; flex-wrap:wrap">
+      ${bags ? `<button class="btn btn-primary" data-baglabels>${icon("qr-code", 16)} Print ${bags} bag label${bags > 1 ? "s" : ""}</button>` : ""}
+      <button class="btn btn-primary" data-inwardreceipt="${x.receipt.id || ''}">${icon("printer", 16)} 🖨 Inward Receipt</button>
+    </div>`
+  ) : (
+    `<div class="row" style="gap:8px; flex-wrap:wrap">
+      <button class="btn btn-primary" data-label="${x.lot_id}">${icon("qr-code", 16)} Print label${x.copies > 1 ? "s" : ""}</button>
+      ${x.roast ? `<button class="btn btn-primary" data-roastticket="${x.roast.id || x.roast.code}">${icon("printer", 16)} 🖨 Roast Ticket</button>` : ""}
+    </div>`
+  );
   return `<div class="saved-banner" role="status">${icon("circle-check", 20)}<div class="sb-txt"><b>${h(x.title)}</b>${x.note ? `<span class="tiny">${h(x.note)}</span>` : ""}</div>
     ${btn}<button class="icon-btn" data-savedclose aria-label="Dismiss">${icon("x", 16)}</button></div>`;
 }

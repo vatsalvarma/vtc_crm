@@ -11,6 +11,7 @@ import { fmtDay } from "../labels.js";
 import { waBill } from "../whatsapp.js";
 import { cashTab, clearCustomer, customerCard, customersTab, cxCan, cxClick, cxSubmit, lastCustomer, maybeLookup, openCash } from "./countercx.js";
 import { clientDialog } from "./clientform.js";
+import { counterBillHtml, printHtml80mm, AtposEscPosDriver } from "../thermal-printer.js";
 
 const rupee = (p) => "₹" + (Number(p || 0) / 100).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 const KIND_LABEL = { coffee_ground: "Ground coffee blend", coffee_beans: "Coffee beans blend", product: "Stock product (tea, chicory…)" };
@@ -713,32 +714,14 @@ async function checkoutBill(client: any = null, billType = "counter") {
   }
 }
 
-// ---------------------------------------------------------------- RECEIPT (80mm)
+// ---------------------------------------------------------------- RECEIPT (80mm ATPOS AT 402)
 function receiptHtml(b: any, copy = false, label = "") {
-  const hd = b.header || { company_name: "Vasavi Trading Company", company_address: "Vijayawada, Andhra Pradesh", company_gstin: "37ABCDE1234F1Z5", tax_setup_approved: true };
-  const line = "-".repeat(32);
-  const gst = hd.tax_setup_approved ? (b.gst_paise ? `<div class="r-row"><span>GST included</span><span>${rupee(b.gst_paise)}</span></div>` : "")
-    : `<div class="r-note">Tax details pending accountant approval</div>`;
-  const lines = b.lines || [];
-  const payments = b.payments || [];
-
-  return `<div class="receipt"><div class="r-c"><b>${h(hd.company_name)}</b>${hd.company_address ? `<br>${h(hd.company_address)}` : ""}${hd.company_gstin ? `<br>GSTIN ${h(hd.company_gstin)}` : ""}</div>
-    ${label ? `<div class="r-copy">${label}</div>` : ""}${copy ? `<div class="r-c"><b>DUPLICATE COPY</b></div>` : ""}<div>${line}</div>
-    <div class="r-row"><span>Bill ${h(b.bill_no)}</span><span>${new Date(b.created_at || Date.now()).toLocaleString("en-IN", { dateStyle: "short", timeStyle: "short" })}</span></div>
-    <div>Cashier: ${h(b.cashier || "Admin")}${b.customer_name ? `<br>Customer: ${h(b.customer_name)}` : ""}</div><div>${line}</div>
-    ${lines.map((l: any) => `<div>${h(l.item_name)}</div><div class="r-row"><span>${num(l.weight_kg, 3)} kg × ${rupee(l.rate_paise)}</span><span>${rupee(l.amount_paise)}</span></div>`).join("")}
-    <div>${line}</div><div class="r-row"><span>Subtotal</span><span>${rupee(b.subtotal_paise || b.total_paise)}</span></div>
-    ${b.discount_paise ? `<div class="r-row"><span>Discount</span><span>-${rupee(b.discount_paise)}</span></div>` : ""}
-    <div class="r-row r-big"><span>TOTAL</span><span>${rupee(b.total_paise)}</span></div>${gst}
-    ${payments.map((p: any) => `<div class="r-row"><span>${p.method}${p.reference ? " " + h(p.reference) : ""}</span><span>${rupee(p.amount_paise || b.total_paise)}</span></div>`).join("")}
-    <div>${line}</div><div class="r-c">Thank you! Visit again.</div></div>`;
+  return counterBillHtml(b, copy, label);
 }
 
-export function printReceipt(b: any, copy = false, labels = [""]) {
-  let area = document.getElementById("print-area");
-  if (!area) { area = document.createElement("div"); area.id = "print-area"; document.body.appendChild(area); }
-  area.innerHTML = labels.map((l) => receiptHtml(b, copy, l)).join("");
-  window.print();
+export function printReceipt(b: any, copy = false, labels = ["CUSTOMER COPY"]) {
+  const html = labels.map((l) => counterBillHtml(b, copy, l)).join("");
+  printHtml80mm(html);
 }
 
 async function receiptDialog(b: any, change: number | null = null, phone = "") {
@@ -747,15 +730,32 @@ async function receiptDialog(b: any, change: number | null = null, phone = "") {
     submit: null,
     body: `
       ${change != null && change >= 0 ? `<div class="hint"><b>Give back ${rupee(change)}</b></div>` : ""}
-      <div class="receipt-preview">${receiptHtml(b, false, "CUSTOMER COPY")}</div>
-      <div class="row mt">
+      <div class="receipt-preview">${counterBillHtml(b, false, "CUSTOMER COPY")}</div>
+      <div class="row mt" style="gap:8px; flex-wrap:wrap">
         <button type="button" class="btn" data-copies="1">🖨 Customer copy</button>
         <button type="button" class="btn btn-primary" data-copies="2">🖨 Customer + office copy</button>
+        <button type="button" class="btn btn-quiet" data-directescpos title="Direct ESC/POS to ATPOS AT 402 via Bluetooth">📡 ATPOS BT Direct</button>
       </div>
       ${phone ? `<div class="row mt"><button type="button" class="btn wa" data-wa>${icon("message-circle", 16)} Send bill on WhatsApp</button></div>` : ""}
+      <p class="tiny mt" style="text-align:center">Standard 80mm roll format for ATPOS AT 402 / ESC-POS.</p>
     `,
     onReady(d) {
-      d.querySelectorAll("[data-copies]").forEach((x: any) => x.addEventListener("click", () => printReceipt(b, false, x.dataset.copies === "2" ? ["CUSTOMER COPY", "OFFICE COPY"] : ["CUSTOMER COPY"])));
+      d.querySelectorAll("[data-copies]").forEach((x: any) =>
+        x.addEventListener("click", () => printReceipt(b, false, x.dataset.copies === "2" ? ["CUSTOMER COPY", "OFFICE COPY"] : ["CUSTOMER COPY"]))
+      );
+      d.querySelector("[data-directescpos]")?.addEventListener("click", async () => {
+        try {
+          const connected = await AtposEscPosDriver.connectBluetooth();
+          if (connected) {
+            const bytes = AtposEscPosDriver.billToEscPos(b, "CUSTOMER COPY");
+            const ok = await AtposEscPosDriver.sendRaw(bytes);
+            if (ok) toast("Printed directly to ATPOS AT 402 via Bluetooth.");
+            else toast("Failed sending ESC/POS commands to printer.", true);
+          }
+        } catch (e: any) {
+          fail(e);
+        }
+      });
       d.querySelector("[data-wa]")?.addEventListener("click", () => waBill(b, phone));
     }
   });
@@ -773,7 +773,7 @@ function billsTab() {
       <input type="date" class="search" value="${data.day}" data-billday aria-label="Day"/>
     </div>
     <section class="card">
-      ${table(["Bill", "Time", "Cashier", "Customer", "Paid by", "Total", "Status"], (data.sales || []).map((b: any) =>
+      ${table(["Bill", "Time", "Cashier", "Customer", "Paid by", "Total", "Status", ""], (data.sales || []).map((b: any) =>
         `<tr>
           <td><b>${h(b.bill_no)}</b></td>
           <td>${new Date(b.created_at).toLocaleTimeString("en-IN", { timeStyle: "short" })}</td>
@@ -782,6 +782,7 @@ function billsTab() {
           <td>${h(b.methods || "CASH")}</td>
           <td><b>${rupee(b.total_paise)}</b></td>
           <td>${tag(b.status === "PAID" ? "DONE" : b.status, b.status)}</td>
+          <td><button class="btn btn-small" data-reprintbill="${b.id || b.bill_no}">🖨 Print</button></td>
         </tr>`), "No bills recorded on this day.")}
     </section>
   `;
@@ -809,6 +810,13 @@ export async function counterClick(el: HTMLElement) {
     return nav.go("counter", S.sub), true;
   }
   if (await cxClick(ds)) return true;
+
+  if (ds.reprintbill) {
+    const data = S.data[`/counter/sales${s.day ? "?day=" + s.day : ""}`] || { sales: [] };
+    const bill = (data.sales || []).find((x: any) => String(x.id) === ds.reprintbill || String(x.bill_no) === ds.reprintbill);
+    if (bill) receiptDialog(bill);
+    return true;
+  }
 
   // Dealer tab actions
   if (ds.newdealer) { if (await clientDialog(null, "dealer")) await nav.go("counter", s); return true; }

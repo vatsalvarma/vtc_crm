@@ -13,6 +13,7 @@ import { fmtDay, offerBagLabels, offerLabels } from "../labels.js";
 import { icon } from "../icons.js";
 import { SECTION } from "../shell.js";
 import { check, chip, confirmBox, dialog, fail, field, goto, h, num, pageHead, select, table, tag, toast, when } from "../ui.js";
+import { inwardReceiptHtml, roastBatchHtml, printHtml80mm } from "../thermal-printer.js";
 
 const eyebrow = () => `${S.me.settings.short_name} / ${S.me.user.role_name}`;
 const d = (path) => S.data[path] || [];
@@ -118,11 +119,12 @@ const inward = {
         ${field("partial_kg", "Partial bags — weighed kg (total)", "number", 'min="0.001" step="0.001" inputmode="decimal"', "Weigh them together on the scale")}
       </div><p class="hint">Sound bags use the approved kg-per-bag. Partial bags use the weight you enter and are usable now. Damaged bags go on hold until someone verifies them.</p>
       <div class="form-actions"><button class="btn btn-primary btn-big" type="submit" ${prods.length ? "" : "disabled"}>${h(t("saveBags"))}</button></div></form></section>` : "";
-    const headers = ["Receipt", "Source", "Coffee", "Bags", "Damaged", "Partial", "Kg in", ...(seeInvoice ? ["Invoice"] : []), ...(seePay ? ["Payment"] : []), "Date"];
+    const headers = ["Receipt", "Source", "Coffee", "Bags", "Damaged", "Partial", "Kg in", ...(seeInvoice ? ["Invoice"] : []), ...(seePay ? ["Payment"] : []), "Date", ""];
     return pageHead(eyebrow(), t("inward"), "Count bags at unloading. No weighing at this step.", can("inventory.view") ? '<button class="btn" data-go="inventory">See stock →</button>' : "") +
       `<div class="grid">${form}<section class="card ${form ? "span7" : "span12"}"><h3>Recent receipts</h3>${table(headers, rows.map((x) =>
         `<tr><td><b class="code">${h(x.code || "#" + x.id)}</b></td><td>${h(x.source_name)}<br><span class="tiny">${h(x.source)}</span></td><td>${h(x.product)}</td><td>${x.bags}</td><td>${x.damaged}</td><td>${x.partial ? `${x.partial}<br><span class="tiny">${num(x.partial_kg, 3)} kg weighed</span>` : 0}</td><td>${num(x.nominal_kg, 3)}</td>${
-          seeInvoice ? `<td>${tag(x.invoice_status)}</td>` : ""}${seePay ? `<td>${tag(x.payment_status)}</td>` : ""}<td>${when(x.created_at)}${x.reversed_at ? " " + tag("REJECTED", "reversed") : ""}${can("goods.reverse") && !x.reversed_at ? ` <button class="btn btn-small btn-quiet" data-reverse="${x.id}">Reverse</button>` : ""}${discussBtn("receipt", x.id)}</td></tr>`))}</section></div>`;
+          seeInvoice ? `<td>${tag(x.invoice_status)}</td>` : ""}${seePay ? `<td>${tag(x.payment_status)}</td>` : ""}<td>${when(x.created_at)}${x.reversed_at ? " " + tag("REJECTED", "reversed") : ""}</td>
+          <td class="nowrap"><button class="btn btn-small" data-inwardreceipt="${x.id}">🖨 Receipt</button>${can("goods.reverse") && !x.reversed_at ? ` <button class="btn btn-small btn-quiet" data-reverse="${x.id}">Reverse</button>` : ""}${discussBtn("receipt", x.id)}</td></tr>`))}</section></div>`;
   },
   async submit(f) {
     const partial = Number(f.partial || 0);
@@ -258,15 +260,16 @@ const roasting = {
     return pageHead(eyebrow(), t("roasting"), "Weighed input and output; loss is calculated for you. Pick any date on the calendar to see that day.") + tabs + strip +
       `<div class="grid">${form}<section class="card ${form ? "span7" : "span12"}"><h3>Roasting calendar</h3>${calendar(x.month, cal.days, x.day)}</section>
       <section class="card span12"><div class="row between"><h3>${h(dayName)}${x.day === istToday() ? " · today" : ""}</h3><span class="row">${chip(`${rows.length} batches`)}${chip(`${num(tot[0], 3)} kg in`)}${chip(`${num(tot[1], 3)} kg out`)}${tot[0] ? chip(`${num(((tot[0] - tot[1]) / tot[0]) * 100)}% loss`) : ""}</span></div>${table(
-        ["Batch", "Roaster", "Coffee in", "Output", "Loss", "Time", "Profile", "Quality"], rows.map((r) =>
-          `<tr><td><b class="code">${h(r.code || "#" + r.id)}</b><br><span class="tiny">${new Date(r.created_at).toLocaleTimeString("en-IN", { timeStyle: "short" })}</span></td><td>${h(r.roaster || "—")}</td><td><span class="tiny">${h(r.inputs || "")}</span><br><b>${num(r.input_kg, 3)} kg</b></td><td>${num(r.output_kg, 3)} kg</td><td>${num(r.input_kg ? (r.loss_kg / r.input_kg) * 100 : 0)}%</td><td>${r.duration_min} min</td><td>${h(r.profile || "—")}</td><td>${tag(r.qc_status)}${r.abnormal ? " " + chip("flagged", "warn") : ""}${discussBtn("roast", r.id)}</td></tr>`), "No batches roasted on this day.")}</section></div>`;
+        ["Batch", "Roaster", "Coffee in", "Output", "Loss", "Time", "Profile", "Quality", ""], rows.map((r) =>
+          `<tr><td><b class="code">${h(r.code || "#" + r.id)}</b><br><span class="tiny">${new Date(r.created_at).toLocaleTimeString("en-IN", { timeStyle: "short" })}</span></td><td>${h(r.roaster || "—")}</td><td><span class="tiny">${h(r.inputs || "")}</span><br><b>${num(r.input_kg, 3)} kg</b></td><td>${num(r.output_kg, 3)} kg</td><td>${num(r.input_kg ? (r.loss_kg / r.input_kg) * 100 : 0)}%</td><td>${r.duration_min} min</td><td>${h(r.profile || "—")}</td><td>${tag(r.qc_status)}${r.abnormal ? " " + chip("flagged", "warn") : ""}</td>
+          <td class="nowrap"><button class="btn btn-small" data-roastticket="${r.id}">🖨 Ticket</button>${discussBtn("roast", r.id)}</td></tr>`), "No batches roasted on this day.")}</section></div>`;
   },
   async submit(f) {
     const inputs = [1, 2].filter((i) => f["lot_" + i] && f["kg_" + i]).map((i) => ({ lot_id: Number(f["lot_" + i]), kg: Number(f["kg_" + i]) }));
     const r = await api("/roasts", "POST", { inputs, output_kg: Number(f.output_kg), duration_min: Number(f.duration_min), profile_id: f.profile_id ? Number(f.profile_id) : null, notes: f.notes, abnormal: !!f.abnormal }, newKey());
     rsub().day = istToday(); rsub().month = istToday().slice(0, 7);
     toast(`Batch ${r.code} saved · ${r.loss_pct}% loss · ${r.qc_status === "QC_HOLD" ? "sent to quality hold" : "released"}`);
-    S.saved = { view: "roasting", title: `Batch ${r.code} saved`, note: `${num(r.output_kg, 3)} kg roasted · ${r.loss_pct}% loss. Label the container.`, lot_id: r.lot_id };
+    S.saved = { view: "roasting", title: `Batch ${r.code} saved`, note: `${num(r.output_kg, 3)} kg roasted · ${r.loss_pct}% loss. Label the container.`, lot_id: r.lot_id, roast: r };
   },
 };
 
@@ -442,6 +445,49 @@ export async function handleClick(btn) {
   if (ds.label) return offerLabels(Number(ds.label), { copies: S.saved?.lot_id === Number(ds.label) ? S.saved.copies || 1 : 1 }), true;
   if (btn.hasAttribute("data-baglabels")) return offerBagLabels(S.saved.receipt), true;
   if (btn.hasAttribute("data-savedclose")) return (S.saved = null), nav.rerender(), true;
+  if (ds.inwardreceipt) {
+    const receipts = d("/inward");
+    const r = receipts.find((x) => String(x.id) === String(ds.inwardreceipt)) || (S.saved?.receipt?.id == ds.inwardreceipt ? S.saved.receipt : S.saved?.receipt);
+    if (r) {
+      await dialog({
+        title: `Goods Inward Receipt · ${r.code || "#" + r.id}`,
+        submit: null,
+        body: `
+          <div class="receipt-preview">${inwardReceiptHtml(r)}</div>
+          <div class="row mt" style="justify-content:center; gap: 8px">
+            <button type="button" class="btn btn-primary" data-printreceipt>🖨 Print (80mm ATPOS)</button>
+          </div>
+          <p class="tiny mt" style="text-align:center">Formatted for 80mm roll on ATPOS AT 402 thermal printer.</p>
+        `,
+        onReady(dl) {
+          dl.querySelector("[data-printreceipt]")?.addEventListener("click", () => printHtml80mm(inwardReceiptHtml(r)));
+        }
+      });
+    }
+    return true;
+  }
+  if (ds.roastticket) {
+    const x = rsub();
+    const roasts = d(`/roasts?day=${x.day}`) || [];
+    const b = roasts.find((r) => String(r.id) === String(ds.roastticket) || String(r.code) === String(ds.roastticket)) || (S.saved?.roast?.id == ds.roastticket ? S.saved.roast : S.saved?.roast);
+    if (b) {
+      await dialog({
+        title: `Roast Batch Ticket · ${b.code || "#" + b.id}`,
+        submit: null,
+        body: `
+          <div class="receipt-preview">${roastBatchHtml(b)}</div>
+          <div class="row mt" style="justify-content:center; gap: 8px">
+            <button type="button" class="btn btn-primary" data-printroast>🖨 Print (80mm ATPOS)</button>
+          </div>
+          <p class="tiny mt" style="text-align:center">Formatted for 80mm roll on ATPOS AT 402 thermal printer.</p>
+        `,
+        onReady(dl) {
+          dl.querySelector("[data-printroast]")?.addEventListener("click", () => printHtml80mm(roastBatchHtml(b)));
+        }
+      });
+    }
+    return true;
+  }
   if (ds.adjust) {
     const [id, kg] = ds.adjust.split(":");
     const r = await dialog({ title: `Correct lot #${id}`, submit: "Send for approval",
