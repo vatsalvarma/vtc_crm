@@ -160,8 +160,10 @@ public class OperationsAndSalesController {
                             inputsSummary.append(lot.getProduct()).append(" (").append(kg).append(" kg)");
 
                             // Deduct consumed green coffee from inventory lot
-                            double remainingAvail = Math.max(0.0, lot.getAvailableKg() - kg);
-                            double remainingTotal = Math.max(0.0, lot.getKg() - kg);
+                            double currentAvail = lot.getAvailableKg() != null ? lot.getAvailableKg() : (lot.getKg() != null ? lot.getKg() : 0.0);
+                            double currentTotal = lot.getKg() != null ? lot.getKg() : currentAvail;
+                            double remainingAvail = Math.max(0.0, currentAvail - kg);
+                            double remainingTotal = Math.max(0.0, currentTotal - kg);
                             lot.setAvailableKg(remainingAvail);
                             lot.setKg(remainingTotal);
                             lot.setUpdatedAt(LocalDateTime.now());
@@ -194,7 +196,8 @@ public class OperationsAndSalesController {
             else if (pid == 2) profileName = "Dark Roast (Espresso / South Indian Filter)";
         }
 
-        String qcStatus = abnormal ? "QC_HOLD" : "RELEASED";
+        // All finished roast batches are held in QC_HOLD until approved by Admin in Quality Control
+        String qcStatus = "QC_HOLD";
 
         long count = roastRepository.count() + 1;
         String batchCode = "RST-" + LocalDate.now().format(DateTimeFormatter.ofPattern("yyMMdd")) + "-" + String.format("%02d", count);

@@ -33,6 +33,7 @@ import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.*;
 import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.stream.Collectors;
 
 @RestController
 @RequestMapping("/api/v1")
@@ -895,22 +896,27 @@ public class PortalEndpointsController {
         RoastBatch batch = opt.get();
 
         String decision = req.getOrDefault("decision", "RELEASED").toString();
+        if (req.containsKey("approved")) {
+            boolean approved = Boolean.parseBoolean(req.get("approved").toString());
+            decision = approved ? "RELEASED" : "REJECTED";
+        }
+        final String finalDecision = decision;
         String note = req.containsKey("note") && req.get("note") != null ? req.get("note").toString() : "";
 
-        batch.setQcStatus(decision);
+        batch.setQcStatus(finalDecision);
         if (note != null && !note.isBlank()) {
             String existingNotes = batch.getOperatorNotes() != null ? batch.getOperatorNotes() + " | " : "";
-            batch.setOperatorNotes(existingNotes + "QC Decision: " + decision + " (" + note + ")");
+            batch.setOperatorNotes(existingNotes + "QC Decision: " + finalDecision + " (" + note + ")");
         }
         RoastBatch savedBatch = roastRepository.save(batch);
 
         // Update the corresponding roasted inventory lot in MySQL
         if (batch.getOutputLotId() != null) {
             inventoryLotRepository.findById(batch.getOutputLotId()).ifPresent(lot -> {
-                lot.setStatus(decision);
-                if ("RELEASED".equalsIgnoreCase(decision)) {
+                lot.setStatus(finalDecision);
+                if ("RELEASED".equalsIgnoreCase(finalDecision)) {
                     lot.setAvailableKg(lot.getKg());
-                } else if ("REJECTED".equalsIgnoreCase(decision)) {
+                } else if ("REJECTED".equalsIgnoreCase(finalDecision)) {
                     lot.setAvailableKg(0.0);
                 }
                 lot.setUpdatedAt(LocalDateTime.now());
@@ -921,10 +927,10 @@ public class PortalEndpointsController {
                     .filter(l -> batch.getOutputLotCode().equalsIgnoreCase(l.getCode()))
                     .findFirst()
                     .ifPresent(lot -> {
-                        lot.setStatus(decision);
-                        if ("RELEASED".equalsIgnoreCase(decision)) {
+                        lot.setStatus(finalDecision);
+                        if ("RELEASED".equalsIgnoreCase(finalDecision)) {
                             lot.setAvailableKg(lot.getKg());
-                        } else if ("REJECTED".equalsIgnoreCase(decision)) {
+                        } else if ("REJECTED".equalsIgnoreCase(finalDecision)) {
                             lot.setAvailableKg(0.0);
                         }
                         lot.setUpdatedAt(LocalDateTime.now());
@@ -1125,7 +1131,15 @@ public class PortalEndpointsController {
             jobs.add(mapPackingTicket(t));
         }
         res.put("jobs", jobs);
-        res.put("sources", inventoryLotRepository.findAllByOrderByCreatedAtDesc());
+
+        // Only released roasted, blended, or ground lots with available coffee are eligible for packaging
+        List<InventoryLot> releasedSources = inventoryLotRepository.findAllByOrderByCreatedAtDesc()
+                .stream()
+                .filter(lot -> "RELEASED".equalsIgnoreCase(lot.getStatus())
+                        && Arrays.asList("ROASTED", "BLENDED", "GROUND").contains(lot.getStage())
+                        && lot.getAvailableKg() != null && lot.getAvailableKg() > 0)
+                .collect(Collectors.toList());
+        res.put("sources", releasedSources);
         return res;
     }
 
