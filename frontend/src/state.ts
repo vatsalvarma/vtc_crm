@@ -37,7 +37,13 @@ export const S: PortalState = {
   arranging: false,  // v1.5: home screen in arrange mode (arrange.js)
 };
 
-export const can = (perm: string): boolean => !!S.me?.perms?.includes(perm);
+export const can = (perm: string): boolean => {
+  const u = S.me?.user;
+  if (u && (u.is_owner || u.tier === "admin" || u.role === "Admin" || u.role_name === "Admin" || u.role_name === "Owner")) {
+    return true;
+  }
+  return !!S.me?.perms?.includes(perm);
+};
 export const tier = (): string | undefined => S.me?.user?.tier;
 
 export const nav: {

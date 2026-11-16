@@ -173,7 +173,7 @@ public class AuthService {
         me.put("modules", modules);
         me.put("live_modules", modules);
 
-        List<String> perms = Arrays.asList(
+        List<String> perms = new ArrayList<>(Arrays.asList(
             "dashboard.my_view", "dashboard.team_view", "tasks.view_own", "tasks.update_own", "tasks.view_all",
             "tasks.assign", "tasks.update_any", "tasks.approve", "goods.view", "goods.receive", "goods.reverse",
             "inventory.view", "inventory.transfer", "stock.cycle_count", "roast.view", "roast.execute",
@@ -181,8 +181,14 @@ public class AuthService {
             "counter.customers", "counter.insights", "outgoing.view", "outgoing.create", "maintenance.raise",
             "maintenance.manage", "team.view", "reports.operational", "recipe.view_public", "qc.view", "roast.qc_release",
             "masters.view", "masters.create_draft", "masters.approve", "system.settings", "system.users",
-            "system.roles", "comms.oversight"
-        );
+            "system.roles", "comms.oversight", "team.profiles", "team.hierarchy", "inward.receive",
+            "roast.record", "pack.record", "counter.cash_verify", "system.grants", "system.audit", "system.preview_as",
+            "finance.view", "finance.collection.record", "finance.collection.verify", "finance.export", "finance.margin",
+            "supplier.pay.record", "supplier.pay.approve", "supplier.pay.proof", "supplier.pay.amount", "supplier.pay.status",
+            "invoice.cost", "invoice.file", "invoice.metadata", "invoice.reconcile", "documents.commercial",
+            "documents.price_hidden", "exceptions.view", "counter.close", "counter.close_approve", "counter.refund",
+            "counter.discount", "counter.price_override", "counter.reopen_day", "dispatch.handover", "pack.create", "pack.qa_approve"
+        ));
         me.put("perms", perms);
 
         Map<String, Object> branch = new HashMap<>();

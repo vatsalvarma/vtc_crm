@@ -365,6 +365,16 @@ body {
   padding: 0 6px !important;
 }
 
+.nav-pend[hidden],
+.nav-pend:empty,
+.nav-pend[data-count="0"],
+.nav-count[hidden],
+.nav-count:empty,
+.bell-badge[hidden],
+.bell-badge:empty {
+  display: none !important;
+}
+
 .sidebar-bottom {
   border-top: 1px solid var(--preview-line) !important;
   color: var(--preview-dim) !important;

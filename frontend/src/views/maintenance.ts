@@ -15,7 +15,7 @@ const URG = (u) => (u === "URGENT" ? tag("hold", "Urgent") : u === "LOW" ? chip(
 export const maintenance = {
   paths: () => ["/maintenance"],
   render() {
-    const all = S.data["/maintenance"], manage = can("maintenance.manage"), tab = S.sub?.tab === "done" ? "done" : "open";
+    const all = S.data["/maintenance"] || [], manage = can("maintenance.manage"), tab = S.sub?.tab === "done" ? "done" : "open";
     const open = all.filter((t) => ["OPEN", "IN_PROGRESS"].includes(t.status)), done = all.filter((t) => !["OPEN", "IN_PROGRESS"].includes(t.status));
     const list = tab === "done" ? done : open;
     return pageHead("Work", "Maintenance", manage ? "Problems with machines or the building. Take each one on, fix it and write what was done." : "Something broken or unsafe? Raise a ticket. The manager sees it at once.",
@@ -44,7 +44,7 @@ export async function maintenanceClick(el) {
     return true;
   }
   if (ds.mupdate) {
-    const t = S.data["/maintenance"].find((x) => x.id === Number(ds.mupdate));
+    const t = (S.data["/maintenance"] || []).find((x: any) => x.id === Number(ds.mupdate));
     let people = [];
     try { people = (await api("/tasks/options")).people; } catch { /* no assign right: keep current */ }
     const f = await dialog({ title: `Ticket #${t.id}: ${t.title}`, submit: "Save",

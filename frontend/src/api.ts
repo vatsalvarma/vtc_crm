@@ -72,7 +72,12 @@ export const ALL_PERMISSIONS = [
   "maintenance.manage", "team.view", "reports.operational", "recipe.view_public", "qc.view", "roast.qc_release",
   "masters.view", "masters.create_draft", "masters.approve", "system.settings", "system.users",
   "system.roles", "comms.oversight", "team.profiles", "team.hierarchy", "inward.receive",
-  "roast.record", "pack.record", "counter.cash_verify", "system.grants", "system.audit", "system.preview_as"
+  "roast.record", "pack.record", "counter.cash_verify", "system.grants", "system.audit", "system.preview_as",
+  "finance.view", "finance.collection.record", "finance.collection.verify", "finance.export", "finance.margin",
+  "supplier.pay.record", "supplier.pay.approve", "supplier.pay.proof", "supplier.pay.amount", "supplier.pay.status",
+  "invoice.cost", "invoice.file", "invoice.metadata", "invoice.reconcile", "documents.commercial",
+  "documents.price_hidden", "exceptions.view", "counter.close", "counter.close_approve", "counter.refund",
+  "counter.discount", "counter.price_override", "counter.reopen_day", "dispatch.handover", "pack.create", "pack.qa_approve"
 ];
 
 export async function api(path: string, method = "GET", body: any = null, idempotencyKey: string | null = null): Promise<any> {

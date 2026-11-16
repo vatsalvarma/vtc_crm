@@ -17,8 +17,18 @@ export async function loadPending() {
 
 export function paintBadges() {
   document.querySelectorAll<HTMLElement>("[data-pend]").forEach((el) => {
-    const n = S.pending?.[el.dataset.pend!]?.count || 0;
-    el.textContent = n > 99 ? "99+" : String(n); el.hidden = !n;
+    const k = el.dataset.pend!;
+    const n = Number(S.pending?.[k]?.count || 0);
+    el.setAttribute("data-count", String(n));
+    if (n > 0) {
+      el.textContent = n > 99 ? "99+" : String(n);
+      el.removeAttribute("hidden");
+      el.style.setProperty("display", "inline-grid", "important");
+    } else {
+      el.textContent = "";
+      el.setAttribute("hidden", "");
+      el.style.setProperty("display", "none", "important");
+    }
   });
 }
 

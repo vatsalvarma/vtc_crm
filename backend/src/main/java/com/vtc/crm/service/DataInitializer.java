@@ -24,6 +24,7 @@ public class DataInitializer implements CommandLineRunner {
     private final OutsideJobRepository outsideJobRepository;
     private final PackingTicketRepository packingRepository;
     private final OutgoingOrderRepository orderRepository;
+    private final MaintenanceTicketRepository maintenanceRepository;
     private final PasswordEncoder passwordEncoder;
 
     public DataInitializer(
@@ -40,6 +41,7 @@ public class DataInitializer implements CommandLineRunner {
             OutsideJobRepository outsideJobRepository,
             PackingTicketRepository packingRepository,
             OutgoingOrderRepository orderRepository,
+            MaintenanceTicketRepository maintenanceRepository,
             PasswordEncoder passwordEncoder) {
         this.userRepository = userRepository;
         this.profileRepository = profileRepository;
@@ -54,6 +56,7 @@ public class DataInitializer implements CommandLineRunner {
         this.outsideJobRepository = outsideJobRepository;
         this.packingRepository = packingRepository;
         this.orderRepository = orderRepository;
+        this.maintenanceRepository = maintenanceRepository;
         this.passwordEncoder = passwordEncoder;
     }
 
@@ -61,6 +64,7 @@ public class DataInitializer implements CommandLineRunner {
     public void run(String... args) {
         seedUsersAndMasters();
         seedTasks();
+        seedMaintenance();
         seedComms();
         seedInwardAndInventory();
         seedRoastBatches();
@@ -560,6 +564,33 @@ public class DataInitializer implements CommandLineRunner {
         o.setCreatedAt(LocalDateTime.now().minusHours(3));
         o.setUpdatedAt(LocalDateTime.now().minusHours(3));
         orderRepository.save(o);
+    }
+
+    private void seedMaintenance() {
+        if (maintenanceRepository.count() > 0) return;
+        User owner = userRepository.findByUsername("owner").orElse(null);
+        Long ownerId = owner != null ? owner.getId() : 1L;
+        String ownerName = owner != null ? owner.getFullName() : "Owner";
+
+        MaintenanceTicket m1 = new MaintenanceTicket(
+            "Roaster heating coil inspection",
+            "ROASTER",
+            "NORMAL",
+            "Minor temperature fluctuation observed during batch 03. Needs element check.",
+            ownerId,
+            ownerName
+        );
+        maintenanceRepository.save(m1);
+
+        MaintenanceTicket m2 = new MaintenanceTicket(
+            "Platform weighing scale calibration",
+            "SCALE",
+            "NORMAL",
+            "Monthly periodic calibration check for counter platform scale.",
+            ownerId,
+            ownerName
+        );
+        maintenanceRepository.save(m2);
     }
 }
 

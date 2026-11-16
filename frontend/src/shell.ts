@@ -29,8 +29,11 @@ export function renderShell() {
     const items = MODULES.filter(([k, , grp]) => grp === g && me.modules.includes(k));
     if (!items.length) return "";
     return `<div class="nav-section">${h(t("grp_" + g))}</div><nav class="nav">${items
-      .map(([k, ic, , col]) => `<button class="nav-item ${S.view === k ? "active" : ""}" data-go="${k}" style="--sec:${col}"><span class="nav-symbol">${icon(ic, 19)}</span><span class="nav-label">${h(t(k))}</span>${
-        planned(k) ? '<span class="soon">SOON</span>' : ""}${k === "comms" ? '<span class="nav-count" hidden></span>' : `<span class="nav-pend" data-pend="${k}" ${S.pending?.[k]?.count ? "" : "hidden"}>${S.pending?.[k]?.count || ""}</span>`}</button>`)
+      .map(([k, ic, , col]) => {
+        const cnt = Number(S.pending?.[k]?.count || 0);
+        return `<button class="nav-item ${S.view === k ? "active" : ""}" data-go="${k}" style="--sec:${col}"><span class="nav-symbol">${icon(ic, 19)}</span><span class="nav-label">${h(t(k))}</span>${
+          planned(k) ? '<span class="soon">SOON</span>' : ""}${k === "comms" ? '<span class="nav-count" hidden style="display:none !important;"></span>' : `<span class="nav-pend" data-pend="${k}" data-count="${cnt}" ${cnt > 0 ? '' : 'hidden style="display:none !important;"'}>${cnt > 0 ? (cnt > 99 ? '99+' : cnt) : ''}</span>`}</button>`;
+      })
       .join("")}</nav>`;
   }).join("");
   const langs = st.languages_enabled || ["en"];

@@ -154,13 +154,22 @@ const FIN_TABS: [string, string, () => boolean][] = [
 export const finance = {
   paths() {
     const s = (S.sub ||= {});
-    if (!FIN_TABS.some(([k, , ok]) => k === s.tab && ok())) s.tab = FIN_TABS.find(([, , ok]) => ok())?.[0];
-    return { recv: ["/receivables"], pay: ["/payables"], tally: ["/tally/exports"], old: ["/opening-dues"] }[s.tab] || [];
+    if (!FIN_TABS.some(([k, , ok]) => k === s.tab && ok())) {
+      s.tab = FIN_TABS.find(([, , ok]) => ok())?.[0] || "recv";
+    }
+    return { recv: ["/receivables"], pay: ["/payables"], tally: ["/tally/exports"], old: ["/opening-dues"] }[s.tab] || ["/receivables"];
   },
   render() {
-    const s = S.sub;
-    const tabs = FIN_TABS.filter(([, , ok]) => ok());
-    const body = { recv: recvTab, pay: payTab, tally: tallyTab, old: oldTab }[s.tab]?.() || "";
+    const s = (S.sub ||= {});
+    let tabs = FIN_TABS.filter(([, , ok]) => ok());
+    if (!tabs.length) {
+      tabs = FIN_TABS;
+    }
+    if (!s.tab || !tabs.some(([k]) => k === s.tab)) {
+      s.tab = tabs[0][0];
+    }
+    const renderFn = { recv: recvTab, pay: payTab, tally: tallyTab, old: oldTab }[s.tab] || recvTab;
+    const body = renderFn();
     return pageHead(eyebrow(), t("finance"), "Money in and out. Tally stays the accounting system of record; nothing here marks a bank transfer as verified by itself.") +
       `<div class="tabs">${tabs.map(([k, l]) => `<button class="tab ${s.tab === k ? "on" : ""}" data-ftab="${k}">${l}</button>`).join("")}</div>${body}`;
   },
