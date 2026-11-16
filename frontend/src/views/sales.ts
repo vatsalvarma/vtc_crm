@@ -45,7 +45,7 @@ export const orders = {
     return ["/orders", ...(can("outgoing.create") ? ["/masters?kind=customer", "/masters?kind=product"] : []), ...(s.tab === "credit" ? ["/customers/credit"] : [])];
   },
   render() {
-    const s = S.sub, rows = S.data["/orders"];
+    const s = S.sub, rows = Array.isArray(S.data["/orders"]) ? S.data["/orders"] : [];
     const tabs = [["orders", "Orders", true], ["credit", "Customer credit", can("outgoing.credit.approve")]].filter((x) => x[2]);
     const money = can("outgoing.price_override") || can("documents.commercial") || can("finance.view");
     const body = s.tab === "credit" ? creditTab() : `<section class="card">${table(["Order", "Customer", "What", "Qty", ...(money ? ["Price"] : []), "Credit", "State", ""], rows.map((o) => {
@@ -56,7 +56,7 @@ export const orders = {
       if (o.state === "CONFIRMED") acts.push(`<button class="btn btn-small" data-oreserve="${o.id}">Reserve stock</button>`);
       if (!o.credit_requested && ["CONFIRMED", "RESERVED"].includes(o.state) && !o.cleared && can("finance.collection.verify")) acts.push(`<button class="btn btn-small" data-oadvance="${o.id}">Record payment</button>`);
       if (["DRAFT", "CREDIT_REVIEW", "CONFIRMED", "RESERVED"].includes(o.state) && !o.dispatched_kg && can("outgoing.create")) acts.push(`<button class="btn btn-small btn-danger" data-ocancel="${o.id}">Cancel</button>`);
-      o.invoices.forEach((i) => acts.push(`<button class="btn btn-small btn-quiet" data-invoice="${i.id}">${h(i.number)}</button>`));
+      (o.invoices || []).forEach((i: any) => acts.push(`<button class="btn btn-small btn-quiet" data-invoice="${i.id}">${h(i.number)}</button>`));
       if (o.customer_phone && ["CONFIRMED", "RESERVED", "DISPATCHED"].includes(o.state)) acts.push(`<button class="btn btn-small wa" data-waorder="${o.id}" aria-label="Send order confirmation on WhatsApp">${icon("message-circle", 14)} WhatsApp</button>`);
       return `<tr><td><b>#${o.id}</b><br><span class="tiny">${when(o.created_at)}</span></td><td>${h(o.customer)}</td><td>${h(o.item)}<br><span class="tiny">${FORM[o.form] || o.form}</span></td>
         <td>${num(o.quantity_kg, 3)} kg${o.dispatched_kg ? `<br><span class="tiny">${num(o.dispatched_kg, 3)} sent</span>` : ""}${o.reserved_kg ? `<br><span class="tiny">${num(o.reserved_kg, 3)} reserved</span>` : ""}</td>
