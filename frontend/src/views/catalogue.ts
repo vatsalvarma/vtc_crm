@@ -82,6 +82,25 @@ export function catalogueRender(tab) {
   return { clients: clientsPage, beans: beansPage, profiles: profilesPage, prices: pricesPage }[tab]();
 }
 
+export const masters = {
+  paths() {
+    const s = (S.sub ||= {});
+    if (!CATALOGUE_TABS.some(([k, , ok]) => k === s.tab && ok())) {
+      s.tab = CATALOGUE_TABS.find(([, , ok]) => ok())?.[0] || "clients";
+    }
+    return cataloguePaths(s.tab) || [];
+  },
+  render() {
+    const s = (S.sub ||= {});
+    let tabs = CATALOGUE_TABS.filter(([, , ok]) => ok());
+    if (!tabs.length) tabs = CATALOGUE_TABS;
+    if (!s.tab || !tabs.some(([k]) => k === s.tab)) s.tab = tabs[0]?.[0] || "clients";
+    const body = catalogueRender(s.tab);
+    return `<div class="pagehead"><div><div class="eyebrow">Management</div><h1>Master Data</h1><p class="sub">Clients & suppliers · Beans & products · Roast profiles · Prices</p></div></div>` +
+      `<div class="tabs">${tabs.map(([k, l]) => `<button class="tab ${s.tab === k ? "on" : ""}" data-ctab="${k}">${l}</button>`).join("")}</div>${body}`;
+  }
+};
+
 async function masterDialog(kind, x = null) {
   const isProd = kind === "product";
   const r = await dialog({ title: x ? `Edit ${x.name}` : isProd ? "Add bean / product" : kind === "customer" ? "Add client" : "Add supplier", submit: "Save",
@@ -96,7 +115,7 @@ async function masterDialog(kind, x = null) {
     if (x) await api(`/masters/${x.id}`, "PUT", body);
     else { const res = await api("/masters", "POST", { kind, ...body }); toast(res.state === "ACTIVE" ? "Added and active." : "Draft saved — an admin will approve it."); }
     if (x) toast("Saved.");
-    await nav.go("admin", S.sub);
+    await nav.go(S.view === "masters" ? "masters" : "admin", S.sub);
   } catch (e) { fail(e); }
 }
 
@@ -105,23 +124,25 @@ async function profileDialog(p = null) {
     body: `${field("name", "Profile name", "text", `required minlength="2" maxlength="60" value="${h(p?.name || "")}"`, "e.g. City+, Medium filter, Dark South Indian")}
       ${field("notes", "Notes (temperature, time, colour target)", "text", `maxlength="200" value="${h(p?.notes || "")}"`)}` });
   if (!r) return;
-  try { await api(p ? `/roast-profiles/${p.id}` : "/roast-profiles", p ? "PUT" : "POST", r); toast("Saved."); await nav.go("admin", S.sub); } catch (e) { fail(e); }
+  try { await api(p ? `/roast-profiles/${p.id}` : "/roast-profiles", p ? "PUT" : "POST", r); toast("Saved."); await nav.go(S.view === "masters" ? "masters" : "admin", S.sub); } catch (e) { fail(e); }
 }
 
 const findMaster = (id) => ["product", "customer", "supplier"].flatMap((k) => S.data[`/masters?kind=${k}`] || []).find((x) => x.id === Number(id));
 
 export async function catalogueClick(btn) {
   const ds = btn.dataset;
+  const targetView = S.view === "masters" ? "masters" : "admin";
+  if (ds.ctab) { S.sub = { tab: ds.ctab }; return nav.go(targetView, S.sub), true; }
   if (ds.madd) return masterDialog(ds.madd), true;
   if (ds.medit) { const x = findMaster(ds.medit); return masterDialog(x.kind, x), true; }
-  if (ds.mapprove) { try { await api(`/masters/${ds.mapprove}/approve`, "POST"); toast("Approved and active."); await nav.go("admin", S.sub); } catch (e) { fail(e); } return true; }
-  if (ds.mtoggle) { const [id, on] = ds.mtoggle.split(":"); try { await api(`/masters/${id}`, "PUT", { active: on === "1" }); toast(on === "1" ? "Switched on." : "Switched off. History is kept."); await nav.go("admin", S.sub); } catch (e) { fail(e); } return true; }
+  if (ds.mapprove) { try { await api(`/masters/${ds.mapprove}/approve`, "POST"); toast("Approved and active."); await nav.go(targetView, S.sub); } catch (e) { fail(e); } return true; }
+  if (ds.mtoggle) { const [id, on] = ds.mtoggle.split(":"); try { await api(`/masters/${id}`, "PUT", { active: on === "1" }); toast(on === "1" ? "Switched on." : "Switched off. History is kept."); await nav.go(targetView, S.sub); } catch (e) { fail(e); } return true; }
   if (ds.action === "addProfile") return profileDialog(), true;
   if (ds.pedit) return profileDialog((S.data["/roast-profiles"] || []).find((p) => p.id === Number(ds.pedit))), true;
-  if (ds.ptoggle) { const [id, on] = ds.ptoggle.split(":"); try { await api(`/roast-profiles/${id}`, "PUT", { active: on === "1" }); await nav.go("admin", S.sub); } catch (e) { fail(e); } return true; }
+  if (ds.ptoggle) { const [id, on] = ds.ptoggle.split(":"); try { await api(`/roast-profiles/${id}`, "PUT", { active: on === "1" }); await nav.go(targetView, S.sub); } catch (e) { fail(e); } return true; }
   if (ds.action === "newItem") return itemDialog(), true;
   if (ds.edititem) return itemDialog(S.data["/counter/setup"].items.find((i) => i.id === Number(ds.edititem))), true;
-  if (ds.toggleitem) { const [id, on] = ds.toggleitem.split(":"); try { await api(`/counter/items/${id}`, "PUT", { active: on === "1" }); await nav.go("admin", S.sub); } catch (e) { fail(e); } return true; }
+  if (ds.toggleitem) { const [id, on] = ds.toggleitem.split(":"); try { await api(`/counter/items/${id}`, "PUT", { active: on === "1" }); await nav.go(targetView, S.sub); } catch (e) { fail(e); } return true; }
   return false;
 }
 
@@ -132,6 +153,6 @@ export async function customRatesSubmit(form) {
     await api("/admin/settings", "PUT", { custom_coffee_rate_paise: money(f.custom_coffee_rate), custom_chicory_rate_paise: money(f.custom_chicory_rate),
       custom_chicory_product_id: f.custom_chicory_product_id ? Number(f.custom_chicory_product_id) : null });
     toast("Custom blend rates saved.");
-    await nav.go("admin", S.sub);
+    await nav.go(S.view === "masters" ? "masters" : "admin", S.sub);
   } catch (e) { fail(e); }
 }

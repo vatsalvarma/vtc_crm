@@ -21,8 +21,9 @@ import { PROFILE_FORMS, profile, profileClick } from "./views/profile.js";
 import { VIEWS, handleClick, handleSubmit } from "./views/ops.js";
 import { blending, outside, packing, productionClick } from "./views/production.js";
 import { dispatch, exceptions, finance, orders, reports, salesClick, salesSubmit } from "./views/sales.js";
+import { masters, catalogueClick, customRatesSubmit } from "./views/catalogue.js";
 
-const ALL_VIEWS: Record<string, any> = { ...VIEWS, profile, admin, maintenance, team, comms, counter, blending, outside, packing, orders, dispatch, finance, exceptions, reports };
+const ALL_VIEWS: Record<string, any> = { ...VIEWS, profile, admin, maintenance, team, comms, counter, blending, outside, packing, orders, dispatch, finance, exceptions, reports, masters };
 
 async function refreshMe() {
   try {
@@ -188,6 +189,7 @@ export function bootPortal() {
     if (["counter", "inventory"].includes(S.view) && (await counterClick(el))) return;
     if (["blending", "outside", "packing"].includes(S.view) && (await productionClick(el))) return;
     if (["orders", "dispatch", "finance", "exceptions", "reports"].includes(S.view) && (await salesClick(el))) return;
+    if (S.view === "masters" && (await catalogueClick(el))) return;
     await handleClick(el);
   });
 
@@ -208,6 +210,7 @@ export function bootPortal() {
     if (form.dataset.compose) return commsSubmit(form);
     if (form.dataset.cform) return counterSubmit(form);
     if (form.dataset.fform) return salesSubmit(form);
+    if (form.matches?.("[data-fform=customrates]")) return customRatesSubmit(form);
     await handleSubmit(form, { ...ALL_VIEWS, packTicket: packing, ...PROFILE_FORMS });
   });
 
