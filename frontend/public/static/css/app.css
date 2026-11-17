@@ -520,6 +520,7 @@ body { background: var(--oat); }
 .nav-item:hover { background: #f7f1eb; color: var(--ink); }
 .nav-item.active { background: color-mix(in srgb, var(--sec, #805039) 11%, #fff); color: var(--ink); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--sec, #805039) 22%, #fff); }
 .nav-pend, .nav-count { min-width: 22px; height: 22px; padding: 0 6px; border-radius: 999px; display: inline-grid; place-items: center; font-size: 11px; font-weight: 800; color: #fff; background: var(--sec, var(--red)); }
+.nav-pend[hidden], .nav-pend:empty, .nav-pend[data-count="0"], .nav-count[hidden], .nav-count:empty { display: none !important; }
 .soon { background: #f1e8df; color: var(--dim); }
 .sidebar-bottom { border-top-color: var(--line); color: var(--dim); }
 .side-btn { color: var(--roast); border-color: var(--line); display: inline-flex; align-items: center; justify-content: center; gap: 6px; }
